@@ -31,28 +31,31 @@ public class Repayment {
 
     private String transactionReference;
 
-    // 🔗 Loan
+    //  Loan
     @ManyToOne
     @JoinColumn(name = "loan_id", nullable = false)
     private Loan loan;
 
-    // 🔗 Loan Application
+    //  Loan Application
     @ManyToOne
     @JoinColumn(name = "loan_applications_id", nullable = false)
     private LoanApplication loanApplication;
 
     // ================= NEW FIELDS =================
 
-    // 🔹 Payment Behavior
+    //  Payment Behavior
     private Boolean isPartialPayment;
     private Boolean isEarlyPayment;
     private Boolean isMissedPayment;
 
-    // 🔹 Interest & Penalty
+    //  Interest & Penalty
     private Double interestAdded;
     private Double penaltyAmount;
     private Integer missedDays;
 
-    // 🔹 Balance Tracking
+    //  Balance Tracking
     private Double balanceAmount;
+
+    //  Borrower tracking
+    private Long borrowerId;
 }

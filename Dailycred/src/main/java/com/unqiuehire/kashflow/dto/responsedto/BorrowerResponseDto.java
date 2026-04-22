@@ -17,4 +17,5 @@ public class BorrowerResponseDto {
     private Integer cibil;
     private String aadharCardNumber;
     private String panCardNumber;
+
 }

@@ -12,9 +12,9 @@ import com.unqiuehire.kashflow.repository.RepaymentRepository;
 import com.unqiuehire.kashflow.service.RepaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
 import java.time.LocalDate;
 import java.util.List;
+
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -35,7 +35,7 @@ public class RepaymentServiceImpl implements RepaymentService {
         LoanApplication loanApplication = loanApplicationRepository.findById(request.getLoanApplicationId())
                 .orElseThrow(() -> new RuntimeException("Loan Application not found"));
 
-        //  VALIDATION
+        // = VALIDATION
         if (!loan.getLoanApplicationId().equals(request.getLoanApplicationId())) {
             throw new RuntimeException("Loan mismatch");
         }
@@ -90,6 +90,7 @@ public class RepaymentServiceImpl implements RepaymentService {
                 .missedDays(request.getMissedDays())
 
                 .balanceAmount(newRemaining)
+                .borrowerId(loan.getBorrowerId())
                 .build();
 
         repaymentRepository.save(repayment);
@@ -130,6 +131,7 @@ public class RepaymentServiceImpl implements RepaymentService {
                 .missedDays(r.getMissedDays())
 
                 .balanceAmount(r.getBalanceAmount())
+                .borrowerId(r.getBorrowerId())
 
                 .transactionReference(r.getTransactionReference())
                 .build();

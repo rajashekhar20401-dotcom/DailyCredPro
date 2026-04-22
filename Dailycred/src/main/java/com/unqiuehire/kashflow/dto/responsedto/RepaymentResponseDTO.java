@@ -27,6 +27,7 @@ public class RepaymentResponseDTO {
     private Integer missedDays;
 
     private Double balanceAmount;
+    private Long borrowerId;
 
     private String transactionReference;
 }
