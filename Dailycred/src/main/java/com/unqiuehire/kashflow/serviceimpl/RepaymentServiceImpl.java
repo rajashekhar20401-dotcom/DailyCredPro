@@ -125,7 +125,7 @@ public class RepaymentServiceImpl implements RepaymentService {
                 .isPartialPayment(r.getIsPartialPayment())
                 .isEarlyPayment(r.getIsEarlyPayment())
                 .isMissedPayment(r.getIsMissedPayment())
-
+                
                 .interestAdded(r.getInterestAdded())
                 .penaltyAmount(r.getPenaltyAmount())
                 .missedDays(r.getMissedDays())
