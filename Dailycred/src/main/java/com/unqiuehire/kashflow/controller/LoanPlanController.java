@@ -16,37 +16,25 @@ import java.util.List;
 public class LoanPlanController {
 
     private final LoanPlanService service;
-
-
-
-    @GetMapping("/{id}")
-    public ApiResponse<LoanPlanResponseDto> getById(@PathVariable Long id) {
-        return service.getLoanPlanById(id);
-    }
-
-    @GetMapping
-    public ApiResponse<List<LoanPlanResponseDto>> getAll() {
-        return service.getAllLoanPlans();
-    }
-
-    @PutMapping("/{id}")
-    public ApiResponse<LoanPlanResponseDto> update(
-            @PathVariable Long id,
-            @RequestBody LoanPlanRequest request) {
-        return service.updateLoanPlan(id, request);
-    }
-
-    @DeleteMapping("/{id}")
-    public ApiResponse<String> delete(@PathVariable Long id) {
-        return service.deleteLoanPlan(id);
-    }
-
-    @PostMapping("/lenders/{lenderId}/loan-plans")
+    @PostMapping("/lender/{lenderId}")
     public ApiResponse<LoanPlanResponseDto> create(
             @PathVariable Long lenderId,
             @RequestBody LoanPlanRequest request) {
-
         return service.createLoanPlan(lenderId, request);
     }
 
+    // GET
+    @GetMapping("/lender/{lenderId}")
+    public ApiResponse<List<LoanPlanResponseDto>> getByLender(@PathVariable Long lenderId) {
+        return service.getLoanPlansByLenderId(lenderId);
+    }
+
+    // UPDATE
+    @PutMapping("/lender/{lenderId}/plan/{planId}")
+    public ApiResponse<LoanPlanResponseDto> update(
+            @PathVariable Long lenderId,
+            @PathVariable Long planId,
+            @RequestBody LoanPlanRequest request) {
+        return service.updateLoanPlanByLenderId(lenderId, planId, request);
+    }
 }

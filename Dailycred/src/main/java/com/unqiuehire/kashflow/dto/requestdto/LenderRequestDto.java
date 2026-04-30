@@ -17,4 +17,10 @@ public class LenderRequestDto {
     private String address;
     private String aadharCardNumber;
     private String panCardNumber;
+
+    private String email;
+    private Boolean notificationEnabled;
+    private Boolean emailNotificationsEnabled;
+    private Boolean termsAccepted;
+    private String termsVersion;
 }

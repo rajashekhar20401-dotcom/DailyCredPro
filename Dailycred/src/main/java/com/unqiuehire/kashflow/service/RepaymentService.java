@@ -12,4 +12,6 @@ public interface RepaymentService {
     List<RepaymentResponseDTO> getByLoan(Long loanId);
 
     List<RepaymentResponseDTO> getByLoanApplication(Long loanApplicationId);
+
+    List<RepaymentResponseDTO> getByBorrower(Long borrowerId);
 }

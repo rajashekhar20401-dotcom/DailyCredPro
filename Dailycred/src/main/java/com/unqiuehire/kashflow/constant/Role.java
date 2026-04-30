@@ -2,5 +2,6 @@ package com.unqiuehire.kashflow.constant;
 
 public enum Role {
     LENDER,
-    BORROWER
+    BORROWER,
+    ADMIN
 }

@@ -13,11 +13,14 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@Table(name = "repayment")
 public class Repayment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    private Long borrowerId;
 
     private Double amountPaid;
 
@@ -31,31 +34,30 @@ public class Repayment {
 
     private String transactionReference;
 
-    //  Loan
     @ManyToOne
     @JoinColumn(name = "loan_id", nullable = false)
     private Loan loan;
 
-    //  Loan Application
     @ManyToOne
-    @JoinColumn(name = "loan_applications_id", nullable = false)
+    @JoinColumn(name = "loan_application_id", nullable = false)
     private LoanApplication loanApplication;
 
-    // ================= NEW FIELDS =================
-
-    //  Payment Behavior
     private Boolean isPartialPayment;
     private Boolean isEarlyPayment;
     private Boolean isMissedPayment;
+    private Boolean isAdvancePayment;
+    private Boolean isLatePayment;
+    private Boolean isPreClosure;
 
-    //  Interest & Penalty
     private Double interestAdded;
     private Double penaltyAmount;
     private Integer missedDays;
-
-    //  Balance Tracking
     private Double balanceAmount;
 
-    //  Borrower tracking
-    private Long borrowerId;
+    private Double allocatedToOverdue;
+    private Double allocatedToTodayDue;
+    private Double allocatedToAdvance;
+    private Double allocatedToPenalty;
+
+    private Integer daysCovered;
 }

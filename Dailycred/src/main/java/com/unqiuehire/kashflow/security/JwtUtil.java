@@ -1,80 +1,78 @@
-//package com.unqiuehire.kashflow.security;
-//
-//import io.jsonwebtoken.Claims;
-//import io.jsonwebtoken.Jwts;
-//import io.jsonwebtoken.security.Keys;
-//import java.nio.charset.StandardCharsets;
-//import java.security.Key;
-//import java.util.Date;
-//import javax.crypto.SecretKey;
-//import org.springframework.stereotype.Component;
-//
-//@Component
-//public class JwtUtil {
-//
-//    // Keep this at least 32+ characters for HS256
-//    private static final String SECRET_KEY =
-//            "my-super-secret-key-for-jwt-token-123456";
-//
-//    private static final long EXPIRATION_TIME = 1000 * 60 * 60 * 10; // 10 hours
-//
-//    private final SecretKey key = Keys.hmacShaKeyFor(
-//            SECRET_KEY.getBytes(StandardCharsets.UTF_8)
-//    );
-//
-//    public String generateToken(Long userId, String phoneNumber, String role) {
-//        Date now = new Date();
-//        Date expiryDate = new Date(now.getTime() + EXPIRATION_TIME);
-//
-//        return Jwts.builder()
-//                .claims()
-//                .subject(phoneNumber)
-//                .add("userId", userId)
-//                .add("role", role)
-//                .expiration(expiryDate)
-//                .issuedAt(now)
-//                .and()
-//                .signWith(key)
-//                .compact();
-//    }
-//
-//    public String extractPhoneNumber(String token) {
-//        return extractAllClaims(token).getSubject();
-//    }
-//
-//    public String extractRole(String token) {
-//        Object role = extractAllClaims(token).get("role");
-//        return role != null ? role.toString() : null;
-//    }
-//
-//    public Long extractUserId(String token) {
-//        Object userId = extractAllClaims(token).get("userId");
-//        if (userId instanceof Integer) {
-//            return ((Integer) userId).longValue();
-//        }
-//        if (userId instanceof Long) {
-//            return (Long) userId;
-//        }
-//        return null;
-//    }
-//
-//    public boolean isTokenValid(String token, String phoneNumber) {
-//        String extractedPhoneNumber = extractPhoneNumber(token);
-//        return extractedPhoneNumber != null
-//                && extractedPhoneNumber.equals(phoneNumber)
-//                && !isTokenExpired(token);
-//    }
-//
-//    private boolean isTokenExpired(String token) {
-//        Date expiration = extractAllClaims(token).getExpiration();
-//        return expiration != null && expiration.before(new Date());
-//    }
-//
-//    private Claims extractAllClaims(String token) {
-//        return Jwts.parser()
-//                .verifyWith(key)
-//                .build()
-//                .parseSignedClaims(token)
-//                .getPayload();
-//    }
-//}
+package com.unqiuehire.kashflow.security;
+
+import com.unqiuehire.kashflow.constant.Role;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
+import java.util.Date;
+
+@Component
+public class JwtUtil {
+
+    private final SecretKey key;
+    private final long expirationMs;
+
+    public JwtUtil(@Value("${app.jwt.secret}") String secret,
+                   @Value("${app.jwt.expiration-ms}") long expirationMs) {
+        this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+        this.expirationMs = expirationMs;
+    }
+
+    public String generateToken(Long userId, String identifier, Role role) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expirationMs);
+
+        return Jwts.builder()
+                .subject(identifier)
+                .claim("userId", userId)
+                .claim("role", role.name())
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(key)
+                .compact();
+    }
+
+    public String extractIdentifier(String token) {
+        return extractAllClaims(token).getSubject();
+    }
+
+    public Long extractUserId(String token) {
+        Object userId = extractAllClaims(token).get("userId");
+        if (userId instanceof Integer) {
+            return ((Integer) userId).longValue();
+        }
+        if (userId instanceof Long) {
+            return (Long) userId;
+        }
+        return null;
+    }
+
+    public String extractRole(String token) {
+        Object role = extractAllClaims(token).get("role");
+        return role == null ? null : role.toString();
+    }
+
+    public boolean isTokenValid(String token, String identifier) {
+        String extractedIdentifier = extractIdentifier(token);
+        return extractedIdentifier != null
+                && extractedIdentifier.equals(identifier)
+                && !isTokenExpired(token);
+    }
+
+    private boolean isTokenExpired(String token) {
+        return extractAllClaims(token).getExpiration().before(new Date());
+    }
+
+    private Claims extractAllClaims(String token) {
+        return Jwts.parser()
+                .verifyWith(key)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+    }
+}

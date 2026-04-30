@@ -1,4 +1,5 @@
 package com.unqiuehire.kashflow.dto.responsedto;
+
 import lombok.Getter;
 import lombok.Setter;
 
@@ -13,6 +14,7 @@ public class LoanResponseDto {
     private Long borrowerId;
     private Long lenderId;
     private Long planId;
+
     private Double totalAmount;
     private Double sanctionedAmount;
     private Double interestPerDay;
@@ -23,4 +25,17 @@ public class LoanResponseDto {
     private LocalDate endDate;
     private Double dailyEmi;
     private Boolean isClosed;
+
+    private Double disbursedAmount;
+    private Double totalRepayableAmount;
+    private Double overdueAmount;
+    private Double totalPaidAmount;
+    private Integer missedDaysCount;
+    private Integer partialDaysCount;
+    private Integer advancePaidDaysCount;
+    private LocalDate nextDueDate;
+
+    private Double platformFeeRate;
+    private Double platformFeeAmount;
+    private Boolean platformFeeCharged;
 }

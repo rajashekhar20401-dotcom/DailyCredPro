@@ -2,166 +2,308 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.ApplicationStatus;
-import com.unqiuehire.kashflow.constant.LoanPlanStatus;
+import com.unqiuehire.kashflow.dto.requestdto.LoanApplicationApprovalRequestDto;
 import com.unqiuehire.kashflow.dto.requestdto.LoanApplicationRequestDto;
+import com.unqiuehire.kashflow.dto.requestdto.LoanRequestDto;
 import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
 import com.unqiuehire.kashflow.dto.responsedto.LoanApplicationResponseDto;
 import com.unqiuehire.kashflow.entity.Borrower;
+import com.unqiuehire.kashflow.entity.Lender;
 import com.unqiuehire.kashflow.entity.LoanApplication;
 import com.unqiuehire.kashflow.entity.LoanPlan;
-import com.unqiuehire.kashflow.exception.ResourceNotFoundException;
 import com.unqiuehire.kashflow.repository.BorrowerRepository;
+import com.unqiuehire.kashflow.repository.LenderRepository;
 import com.unqiuehire.kashflow.repository.LoanApplicationRepository;
 import com.unqiuehire.kashflow.repository.LoanPlanRepository;
 import com.unqiuehire.kashflow.service.LoanApplicationService;
+import com.unqiuehire.kashflow.service.LoanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class LoanApplicationServiceImpl implements LoanApplicationService {
 
-    private final LoanApplicationRepository repository;
+    private final LoanApplicationRepository loanApplicationRepository;
     private final LoanPlanRepository loanPlanRepository;
     private final BorrowerRepository borrowerRepository;
+    private final LenderRepository lenderRepository;
+    private final LoanService loanService;
 
     @Override
-    public ApiResponse<LoanApplicationResponseDto> createApplication(LoanApplicationRequestDto dto) {
+    public ApiResponse<LoanApplicationResponseDto> applyLoan(Long borrowerId, Long lenderId, Long planId, LoanApplicationRequestDto requestDto) {
 
-        if (dto == null) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Loan application request cannot be null", null);
+        Optional<Borrower> borrowerOptional = borrowerRepository.findById(borrowerId);
+        if (borrowerOptional.isEmpty()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower not found", null);
         }
 
-        if (dto.getBorrowerId() == null) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower id is required", null);
+        Optional<Lender> lenderOptional = lenderRepository.findById(lenderId);
+        if (lenderOptional.isEmpty()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Lender not found", null);
         }
 
-        if (dto.getPlanId() == null) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Plan id is required", null);
+        Optional<LoanPlan> planOptional = loanPlanRepository.findById(planId);
+        if (planOptional.isEmpty()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Loan plan not found", null);
         }
 
-        if (dto.getLoanAmount() == null || dto.getLoanAmount() <= 0) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Loan amount must be greater than 0", null);
+        Borrower borrower = borrowerOptional.get();
+        Lender lender = lenderOptional.get();
+        LoanPlan loanPlan = planOptional.get();
+
+        if (Boolean.TRUE.equals(borrower.getFrozen())) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower account is frozen: " + safeReason(borrower.getFreezeReason()), null);
         }
 
-        Borrower borrower = borrowerRepository.findById(dto.getBorrowerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Borrower not found"));
-
-        LoanPlan plan = loanPlanRepository.findById(dto.getPlanId())
-                .orElseThrow(() -> new ResourceNotFoundException("Loan Plan not found"));
-
-        if (Boolean.FALSE.equals(borrower.getIsActive())) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Inactive borrower cannot apply for loan", null);
+        if (Boolean.TRUE.equals(lender.getFrozen())) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Lender account is frozen: " + safeReason(lender.getFreezeReason()), null);
         }
 
-        if (plan.getStatus() != LoanPlanStatus.ACTIVE) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "This loan plan is not active", null);
+        if (Boolean.TRUE.equals(borrower.getBlacklisted())) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower is blacklisted", null);
         }
 
-        if (dto.getLoanAmount() > plan.getAmount()) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Requested loan amount exceeds loan plan amount", null);
+        if (Boolean.TRUE.equals(lender.getBlacklisted())) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Lender is blacklisted", null);
         }
 
-        if (borrower.getCibil() == null) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower CIBIL is missing", null);
+        if (!loanPlan.getLender().getLenderId().equals(lenderId)) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Lender mismatch with loan plan", null);
         }
 
-        if (borrower.getCibil() < plan.getMinCibil()) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower does not meet minimum CIBIL for this plan", null);
+        // keep age rule
+        if (loanPlan.getMinAge() == null || loanPlan.getMaxAge() == null) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Loan plan age not configured", null);
         }
 
-        boolean alreadyPending = repository.existsByBorrower_BorrowerIdAndLoanPlan_IdAndStatus(
-                borrower.getBorrowerId(),
-                plan.getId(),
-                ApplicationStatus.PENDING
-        );
-
-        if (alreadyPending) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Borrower already has a pending application for this plan", null);
+        if (requestDto.getAge() < loanPlan.getMinAge() || requestDto.getAge() > loanPlan.getMaxAge()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Age not eligible", null);
         }
 
-        LoanApplication app = new LoanApplication();
-        app.setBorrower(borrower);
-        app.setLoanPlan(plan);
-        app.setLoanAmount(dto.getLoanAmount());
-        app.setStatus(ApplicationStatus.PENDING);
-        app.setIsLoanCreated(false);
+        // keep income rule
+        if (requestDto.getMonthlyIncome() < loanPlan.getMinMonthlyIncome()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Income too low", null);
+        }
 
-        LoanApplication saved = repository.save(app);
+        boolean collateralRequired = isCollateralRequiredForBorrower(borrower);
+
+        if (collateralRequired) {
+            if (requestDto.getCollateral() == null || requestDto.getCollateral().trim().isEmpty()) {
+                return new ApiResponse<>(ApiStatus.FAILURE, "Collateral is required for this borrower profile", null);
+            }
+        }
+
+        LoanApplication application = new LoanApplication();
+        application.setBorrower(borrower);
+        application.setLender(lender);
+        application.setLoanPlan(loanPlan);
+        application.setLoanAmount(requestDto.getLoanAmount());
+        application.setAge(requestDto.getAge());
+        application.setMonthlyIncome(requestDto.getMonthlyIncome());
+        application.setEmploymentType(requestDto.getEmployeeType());
+        application.setPinCode(requestDto.getPinCode());
+
+        // no longer used in product flow, keep compatible defaults
+        application.setIsEducated(false);
+        application.setCertificates(null);
+
+        application.setCollateral(collateralRequired ? requestDto.getCollateral() : null);
+        application.setStatus(ApplicationStatus.PENDING);
+        application.setAppliedAt(LocalDateTime.now());
+
+        LoanApplication saved = loanApplicationRepository.save(application);
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,
-                "Loan application created successfully",
-                mapToDto(saved)
+                "Loan applied successfully",
+                mapToResponse(saved)
         );
     }
 
     @Override
-    public ApiResponse<LoanApplicationResponseDto> getById(Long id) {
-        LoanApplication app = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
+    @Transactional
+    public ApiResponse<LoanApplicationResponseDto> updateLoanDecision(
+            Long applicationId,
+            Long lenderId,
+            LoanApplicationApprovalRequestDto requestDto) {
 
-        return new ApiResponse<>(ApiStatus.SUCCESS, "Loan application fetched successfully", mapToDto(app));
+        Optional<LoanApplication> optional = loanApplicationRepository.findById(applicationId);
+
+        if (optional.isEmpty()) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Loan application not found", null);
+        }
+
+        LoanApplication application = optional.get();
+
+        if (!application.getLender().getLenderId().equals(lenderId)) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Unauthorized: Lender mismatch", null);
+        }
+
+        if (requestDto.getApplicationStatus() == null) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Application status is required", null);
+        }
+
+        if (application.getStatus() != ApplicationStatus.PENDING) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Application already processed", null);
+        }
+
+        if (requestDto.getApplicationStatus() == ApplicationStatus.PENDING) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Cannot set status back to PENDING", null);
+        }
+
+        application.setStatus(requestDto.getApplicationStatus());
+
+        if (requestDto.getRemarks() != null) {
+            application.setRejectionReason(requestDto.getRemarks());
+        }
+
+        application.setUpdatedAt(LocalDateTime.now());
+
+        if (requestDto.getApplicationStatus() == ApplicationStatus.APPROVED) {
+
+            if (!application.getIsLoanCreated()) {
+
+                LoanRequestDto loanRequest = new LoanRequestDto();
+
+                loanRequest.setLoanApplicationId(application.getApplicationId());
+                loanRequest.setBorrowerId(application.getBorrower().getBorrowerId());
+                loanRequest.setLenderId(application.getLender().getLenderId());
+                loanRequest.setPlanId(application.getLoanPlan().getId());
+
+                loanRequest.setSanctionedAmount(application.getLoanAmount());
+                loanRequest.setTotalAmount(application.getLoanAmount());
+
+                loanRequest.setTenureDays(application.getLoanPlan().getPlanDuration());
+                loanRequest.setInterestPerDay(application.getLoanPlan().getInterestPerDay());
+                loanRequest.setPenaltyAmount(application.getLoanPlan().getPenaltyAmount());
+
+                loanRequest.setStartDate(LocalDate.now());
+
+                ApiResponse<?> loanCreationResponse = loanService.createLoan(loanRequest);
+
+                if (loanCreationResponse.getStatus() == ApiStatus.FAILURE) {
+                    throw new RuntimeException("Loan creation failed: " + loanCreationResponse.getMessage());
+                }
+
+                application.setIsLoanCreated(true);
+            }
+        }
+
+        LoanApplication updated = loanApplicationRepository.save(application);
+
+        return new ApiResponse<>(
+                ApiStatus.SUCCESS,
+                "Loan application decision updated successfully",
+                mapToResponse(updated)
+        );
     }
 
     @Override
-    public ApiResponse<List<LoanApplicationResponseDto>> getByBorrower(Long borrowerId) {
-        List<LoanApplicationResponseDto> list = repository.findByBorrower_BorrowerId(borrowerId)
+    public ApiResponse<LoanApplicationResponseDto> getApplicationById(Long applicationId) {
+
+        Optional<LoanApplication> optional = loanApplicationRepository.findById(applicationId);
+
+        if (optional.isEmpty()) {
+            return new ApiResponse<>(
+                    ApiStatus.FAILURE,
+                    "Loan application not found",
+                    null
+            );
+        }
+
+        LoanApplication application = optional.get();
+
+        return new ApiResponse<>(
+                ApiStatus.SUCCESS,
+                "Loan application fetched successfully",
+                mapToResponse(application)
+        );
+    }
+
+    @Override
+    public ApiResponse<List<LoanApplicationResponseDto>> getApplicationsByLenderId(Long lenderId) {
+
+        List<LoanApplicationResponseDto> list = loanApplicationRepository
+                .findByLender_LenderId(lenderId)
                 .stream()
-                .map(this::mapToDto)
-                .toList();
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
 
-        return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower loan applications fetched successfully", list);
+        return new ApiResponse<>(
+                ApiStatus.SUCCESS,
+                "Lender applications fetched successfully",
+                list
+        );
     }
 
     @Override
-    public ApiResponse<List<LoanApplicationResponseDto>> getByLender(Long lenderId) {
-        List<LoanApplicationResponseDto> list = repository.findByLoanPlan_Lender_LenderId(lenderId)
+    public ApiResponse<List<LoanApplicationResponseDto>> getApplicationsByBorrowerId(Long borrowerId) {
+
+        List<LoanApplicationResponseDto> list = loanApplicationRepository
+                .findByBorrower_BorrowerId(borrowerId)
                 .stream()
-                .map(this::mapToDto)
-                .toList();
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
 
-        return new ApiResponse<>(ApiStatus.SUCCESS, "Lender loan applications fetched successfully", list);
+        return new ApiResponse<>(
+                ApiStatus.SUCCESS,
+                "Borrower applications fetched successfully",
+                list
+        );
     }
 
-    @Override
-    public ApiResponse<String> cancelApplication(Long id) {
-        LoanApplication app = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Application not found"));
-
-        if (app.getStatus() == ApplicationStatus.APPROVED) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Approved application cannot be cancelled", null);
-        }
-
-        if (app.getStatus() == ApplicationStatus.REJECTED) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Rejected application cannot be cancelled", null);
-        }
-
-        if (app.getStatus() == ApplicationStatus.CANCELLED) {
-            return new ApiResponse<>(ApiStatus.FAILURE, "Application is already cancelled", null);
-        }
-
-        app.setStatus(ApplicationStatus.CANCELLED);
-        repository.save(app);
-
-        return new ApiResponse<>(ApiStatus.SUCCESS, "Loan application cancelled successfully", "ID: " + id);
-    }
-
-    private LoanApplicationResponseDto mapToDto(LoanApplication app) {
+    private LoanApplicationResponseDto mapToResponse(LoanApplication application) {
         LoanApplicationResponseDto dto = new LoanApplicationResponseDto();
-
-        dto.setApplicationId(app.getApplicationId());
-        dto.setBorrowerId(app.getBorrower().getBorrowerId());
-        dto.setPlanId(app.getLoanPlan().getId());
-        dto.setLenderId(app.getLoanPlan().getLender().getLenderId());
-        dto.setLoanAmount(app.getLoanAmount());
-        dto.setStatus(app.getStatus().name());
-        dto.setApplicationDate(app.getApplicationDate() != null ? app.getApplicationDate().toString() : null);
-        dto.setRejectionReason(app.getRejectionReason());
-        dto.setIsLoanCreated(app.getIsLoanCreated());
-
+        dto.setApplicationId(application.getApplicationId());
+        dto.setBorrowerId(application.getBorrower().getBorrowerId());
+        dto.setLenderId(application.getLender().getLenderId());
+        dto.setPlanId(application.getLoanPlan().getId());
+        dto.setLoanAmount(application.getLoanAmount());
+        dto.setAge(application.getAge());
+        dto.setMonthlyIncome(application.getMonthlyIncome());
+        dto.setEmployeeType(application.getEmploymentType());
+        dto.setPinCode(application.getPinCode());
+        dto.setIsEducated(application.getIsEducated());
+        dto.setCertificates(application.getCertificates());
+        dto.setCollateral(application.getCollateral());
+        dto.setApplicationStatus(application.getStatus());
+        dto.setAppliedAt(application.getAppliedAt());
         return dto;
+    }
+
+    private boolean isCollateralRequiredForBorrower(Borrower borrower) {
+        String riskCategory = borrower.getRiskCategory() == null ? "" : borrower.getRiskCategory().trim().toUpperCase();
+        String eligibilityStatus = borrower.getEligibilityStatus() == null ? "" : borrower.getEligibilityStatus().trim().toUpperCase();
+
+        int totalLoansTaken = borrower.getTotalLoansTaken() == null ? 0 : borrower.getTotalLoansTaken();
+        int defaultedLoanCount = borrower.getDefaultedLoanCount() == null ? 0 : borrower.getDefaultedLoanCount();
+        int totalMissedDays = borrower.getTotalMissedDays() == null ? 0 : borrower.getTotalMissedDays();
+        int maxConsecutiveMissedDays = borrower.getMaxConsecutiveMissedDays() == null ? 0 : borrower.getMaxConsecutiveMissedDays();
+
+        boolean highRisk = "HIGH".equals(riskCategory);
+        boolean explicitlyCollateralRequired = "COLLATERAL_REQUIRED".equals(eligibilityStatus);
+
+        boolean poorEarlyHistory =
+                totalLoansTaken > 0
+                        && totalLoansTaken < 3
+                        && (
+                        defaultedLoanCount >= totalLoansTaken
+                                || totalMissedDays >= 10
+                                || maxConsecutiveMissedDays >= 5
+                );
+
+        return highRisk || explicitlyCollateralRequired || poorEarlyHistory;
+    }
+
+    private String safeReason(String reason) {
+        return (reason == null || reason.trim().isEmpty()) ? "no reason provided" : reason;
     }
 }

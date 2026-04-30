@@ -3,6 +3,8 @@ package com.unqiuehire.kashflow.dto.requestdto;
 import com.unqiuehire.kashflow.constant.PaymentMode;
 import lombok.Data;
 
+import java.time.LocalDate;
+
 @Data
 public class RepaymentRequestDTO {
 
@@ -12,6 +14,6 @@ public class RepaymentRequestDTO {
     private Double amountPaid;
     private PaymentMode paymentMode;
 
-    // Optional (frontend can send or backend can calculate)
-    private Integer missedDays;
+    // optional, if null backend will use LocalDate.now()
+    private LocalDate paymentDate;
 }

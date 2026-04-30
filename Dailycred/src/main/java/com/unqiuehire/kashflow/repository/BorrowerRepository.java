@@ -12,4 +12,6 @@ public interface BorrowerRepository extends JpaRepository<Borrower, Long> {
     Optional<Borrower> findByPanCardNumber(String panCardNumber);
 
     Optional<Borrower> findByPhoneNumber(String phoneNumber);
+
+    Optional<Borrower> findByEmail(String email);
 }

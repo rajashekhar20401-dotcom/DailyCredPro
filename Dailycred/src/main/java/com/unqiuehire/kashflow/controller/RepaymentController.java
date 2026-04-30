@@ -11,13 +11,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/repayments")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "*")
 public class RepaymentController {
 
     private final RepaymentService repaymentService;
 
     @PostMapping
-    public RepaymentResponseDTO makePayment(@RequestBody RepaymentRequestDTO request) {
-        return repaymentService.makePayment(request);
+    public RepaymentResponseDTO makePayment(@RequestBody RepaymentRequestDTO requestDTO) {
+        return repaymentService.makePayment(requestDTO);
     }
 
     @GetMapping("/loan/{loanId}")
@@ -25,8 +26,13 @@ public class RepaymentController {
         return repaymentService.getByLoan(loanId);
     }
 
-    @GetMapping("/application/{loanApplicationId}")
+    @GetMapping("/loan-application/{loanApplicationId}")
     public List<RepaymentResponseDTO> getByLoanApplication(@PathVariable Long loanApplicationId) {
         return repaymentService.getByLoanApplication(loanApplicationId);
+    }
+
+    @GetMapping("/borrower/{borrowerId}")
+    public List<RepaymentResponseDTO> getByBorrower(@PathVariable Long borrowerId) {
+        return repaymentService.getByBorrower(borrowerId);
     }
 }

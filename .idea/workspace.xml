@@ -5,8 +5,80 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9b9adb6c-f160-43bf-a547-10fa62c93b2b" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/EmployeeType.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/WalletOwnerType.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/WalletTransactionType.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanApplicationApprovalRequestDto.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Wallet.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/WalletTransaction.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/WalletRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/WalletTransactionRepository.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanCalculationService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/WalletService.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanCalculationServiceImpl.java" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/WalletServiceImpl.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/config/CorsConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/config/CorsConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/config/SecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/config/SecurityConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/PaymentMode.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/PaymentMode.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/PaymentStatus.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/PaymentStatus.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/Role.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/Role.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/constant/StatusEnum.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/AuthController.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/AuthController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LenderController.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LenderController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LoanApplicationController.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LoanApplicationController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LoanDecisionController.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LoanPlanController.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/LoanPlanController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/RepaymentController.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/controller/RepaymentController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/BorrowerRequestDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/BorrowerRequestDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LenderRequestDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LenderRequestDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanApplicationRequestDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanApplicationRequestDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanDecisionRequestDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanPlanRequest.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanPlanRequest.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanRequestDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoanRequestDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoginRequestDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/LoginRequestDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/RepaymentRequestDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/requestdto/RepaymentRequestDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/BorrowerResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/BorrowerResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LenderResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LenderResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanApplicationResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanApplicationResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanDecisionResponseDTO.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanPlanResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanPlanResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoanResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoginResponseDto.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/LoginResponseDto.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/RepaymentResponseDTO.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/dto/responsedto/RepaymentResponseDTO.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Borrower.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Borrower.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Lender.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Lender.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Loan.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Loan.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/LoanApplication.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/LoanApplication.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/LoanDecision.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/LoanPlan.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/LoanPlan.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Repayment.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/entity/Repayment.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/BorrowerRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/BorrowerRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LenderRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LenderRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanApplicationRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanApplicationRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanDecisionRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanPlanRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanPlanRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/LoanRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/RepaymentRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/repository/RepaymentRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/security/JwtAuthenticationFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/security/JwtAuthenticationFilter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/security/JwtUtil.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/security/JwtUtil.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/AadhaarOcrService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/AuthService.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/AuthService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanApplicationService.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanApplicationService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanDecisionService.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanPlanService.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/LoanPlanService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/RepaymentService.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/service/RepaymentService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/AadhaarOcrServiceImpl.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/AuthServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/AuthServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/BorrowerServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/BorrowerServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LenderServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LenderServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanApplicationServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanApplicationServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanDecisionServiceImpl.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanPlanServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanPlanServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/LoanServiceImpl.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/RepaymentServiceImpl.java" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/java/com/unqiuehire/kashflow/serviceimpl/RepaymentServiceImpl.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dailycred/src/main/resources/application.properties" beforeDir="false" afterPath="$PROJECT_DIR$/Dailycred/src/main/resources/application.properties" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -14,13 +86,14 @@
     <option name="LAST_RESOLUTION" value="IGNORE" />
   </component>
   <component name="EmbeddingIndexingInfo">
-    <option name="cachedIndexableFilesCount" value="98" />
+    <option name="cachedIndexableFilesCount" value="181" />
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
       <list>
         <option value="Enum" />
         <option value="Class" />
+        <option value="Interface" />
       </list>
     </option>
   </component>
@@ -60,7 +133,7 @@
     &quot;Spring Boot.DailyCred.executor&quot;: &quot;Run&quot;,
     &quot;Spring Boot.LoanApplication.executor&quot;: &quot;Run&quot;,
     &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;feature/borrower&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Merging feature/borrower&quot;,
     &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
     &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
     &quot;project.structure.last.edited&quot;: &quot;Project&quot;,
@@ -107,5 +180,16 @@
       <updated>1775795649049</updated>
     </task>
     <servers />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
   </component>
 </project>

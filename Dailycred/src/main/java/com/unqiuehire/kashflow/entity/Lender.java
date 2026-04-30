@@ -38,6 +38,69 @@ public class Lender {
     @Column(name = "address", nullable = false, length = 500)
     private String address;
 
+    @Column(name = "kyc_completion_percent")
+    private Integer kycCompletionPercent = 0;
+
+    @Column(name = "kyc_verified")
+    private Boolean kycVerified = false;
+
+    @Column(name = "frozen")
+    private Boolean frozen = false;
+
+    @Column(name = "freeze_reason", length = 500)
+    private String freezeReason;
+
+    @Column(name = "fraud_flag")
+    private Boolean fraudFlag = false;
+
+    @Column(name = "manual_review_flag")
+    private Boolean manualReviewFlag = false;
+
+    @Column(name = "blacklisted")
+    private Boolean blacklisted = false;
+
+    @Column(name = "fraud_reason", length = 500)
+    private String fraudReason;
+
+    @Column(name = "current_latitude")
+    private Double currentLatitude;
+
+    @Column(name = "current_longitude")
+    private Double currentLongitude;
+
+    @Column(name = "last_known_latitude")
+    private Double lastKnownLatitude;
+
+    @Column(name = "last_known_longitude")
+    private Double lastKnownLongitude;
+
+    @Column(name = "location_consent_given")
+    private Boolean locationConsentGiven = false;
+
+    @Column(name = "last_location_updated_at")
+    private java.time.LocalDateTime lastLocationUpdatedAt;
+
+    @Column(name = "email", unique = true, length = 150)
+    private String email;
+
+    @Column(name = "notification_enabled")
+    private Boolean notificationEnabled = true;
+
+    @Column(name = "email_notifications_enabled")
+    private Boolean emailNotificationsEnabled = true;
+
+    @Column(name = "terms_accepted")
+    private Boolean termsAccepted = false;
+
+    @Column(name = "terms_accepted_at")
+    private java.time.LocalDateTime termsAcceptedAt;
+
+    @Column(name = "terms_version", length = 50)
+    private String termsVersion;
+
+    @OneToMany(mappedBy = "lender")
+    private List<LoanApplication> loanApplications;
+
     //  ONE TO MANY
     @OneToMany(mappedBy = "lender", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LoanPlan> loanPlans;

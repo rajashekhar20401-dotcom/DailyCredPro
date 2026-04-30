@@ -1,6 +1,7 @@
 package com.unqiuehire.kashflow.entity;
 
 import com.unqiuehire.kashflow.constant.ApplicationStatus;
+import com.unqiuehire.kashflow.constant.EmployeeType;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -29,6 +30,10 @@ public class LoanApplication {
     @Column(nullable = false)
     private Double loanAmount;
 
+    @ManyToOne
+    @JoinColumn(name = "lender_id", nullable = false)
+    private Lender lender;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ApplicationStatus status;
@@ -45,6 +50,29 @@ public class LoanApplication {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+
+    @Column(nullable = false)
+    private Integer age;
+
+    @Column(nullable = false)
+    private Double monthlyIncome;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private EmployeeType employmentType;
+
+    @Column(nullable = false)
+    private String pinCode;
+
+    @Column(nullable = false)
+    private Boolean isEducated;
+
+    private String certificates;
+    private String collateral;
+
+    @Column(nullable = false)
+    private LocalDateTime appliedAt;
 
     @PrePersist
     public void onCreate() {
