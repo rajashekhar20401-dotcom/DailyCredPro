@@ -26,4 +26,8 @@ public interface AdminOversightService {
 
     ApiResponse<String> freezeWallet(WalletOwnerType ownerType, Long ownerId);
     ApiResponse<String> unfreezeWallet(WalletOwnerType ownerType, Long ownerId);
+
+    ApiResponse<String> updateGlobalBorrowerPolicy(Long adminId, AdminActionRequestDto requestDto);
+    ApiResponse<String> updateBorrowerOverride(Long adminId, Long borrowerId, AdminActionRequestDto requestDto);
+    ApiResponse<String> clearBorrowerOverride(Long adminId, Long borrowerId);
 }

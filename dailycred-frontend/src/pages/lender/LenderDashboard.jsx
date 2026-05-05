@@ -43,6 +43,43 @@ function StatusPill({ text, tone = "slate" }) {
   );
 }
 
+function getApiPayload(response) {
+  const body = response?.data;
+  if (
+    body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.prototype.hasOwnProperty.call(body, "data") &&
+    (
+      Object.prototype.hasOwnProperty.call(body, "status") ||
+      Object.prototype.hasOwnProperty.call(body, "message")
+    )
+  ) {
+    return body.data;
+  }
+  return body;
+}
+
+function toNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+function money(value) {
+  return toNumber(value).toFixed(2);
+}
+
+function percent(value) {
+  return `${toNumber(value).toFixed(2)}%`;
+}
+
+function formatDateTime(dateValue) {
+  if (!dateValue) return "-";
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return String(dateValue);
+  return date.toLocaleString();
+}
+
 export default function LenderDashboard() {
   const { userId, displayName } = useAuth();
 
@@ -56,36 +93,143 @@ export default function LenderDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const unreadCount = useMemo(() => {
-    return notifications.filter((item) => !item.readFlag).length;
-  }, [notifications]);
+  const unreadCount = useMemo(
+    () => notifications.filter((item) => !item.readFlag).length,
+    [notifications]
+  );
+
+  const metrics = useMemo(() => {
+    const totalPrincipalDisbursed =
+      toNumber(summary?.totalPrincipalDisbursed) ||
+      toNumber(summary?.totalDisbursed);
+
+    const totalCollected = toNumber(summary?.totalCollected);
+
+    const expectedTotalRepayment =
+      toNumber(summary?.expectedTotalRepayment) ||
+      toNumber(summary?.recoverableAmount);
+
+    const currentOutstanding =
+      toNumber(summary?.currentOutstanding) ||
+      toNumber(summary?.totalOutstanding);
+
+    const totalOverdue =
+      toNumber(summary?.totalOverdue) ||
+      toNumber(summary?.overdueAmount);
+
+    const grossProfit =
+      toNumber(summary?.estimatedGrossProfit) ||
+      toNumber(summary?.projectedProfit);
+
+    const platformFee =
+      toNumber(summary?.estimatedPlatformFee) ||
+      toNumber(summary?.platformFeeAmount);
+
+    const netProfit =
+      toNumber(summary?.estimatedNetProfit) ||
+      Math.max(0, grossProfit - platformFee);
+
+    const totalPenaltyAccrued =
+      toNumber(summary?.totalPenaltyAccrued) ||
+      toNumber(summary?.totalPenaltyCollected);
+
+    const recoveryRate =
+      toNumber(summary?.projectedRecoveryRate) ||
+      (totalPrincipalDisbursed > 0
+        ? (totalCollected / totalPrincipalDisbursed) * 100
+        : 0);
+
+    const collectionRate =
+      toNumber(summary?.projectedCollectionRate) ||
+      (expectedTotalRepayment > 0
+        ? (totalCollected / expectedTotalRepayment) * 100
+        : 0);
+
+    const paidToday =
+      toNumber(summary?.paidTodayCount) ||
+      toNumber(summary?.paidToday);
+
+    const missedToday =
+      toNumber(summary?.missedTodayCount) ||
+      toNumber(summary?.missedToday);
+
+    const partialToday =
+      toNumber(summary?.partialTodayCount) ||
+      toNumber(summary?.partialToday);
+
+    const advanceToday =
+      toNumber(summary?.advanceTodayCount) ||
+      toNumber(summary?.advanceToday);
+
+    const overdueBorrowers =
+      toNumber(summary?.currentlyOverdueBorrowerCount) ||
+      toNumber(summary?.overdueBorrowers);
+
+    return {
+      totalLoans: toNumber(summary?.totalLoans),
+      activeLoans: toNumber(summary?.activeLoans),
+      closedLoans: toNumber(summary?.closedLoans),
+      defaultedLoans: toNumber(summary?.defaultedLoans),
+      totalPrincipalDisbursed,
+      totalCollected,
+      expectedTotalRepayment,
+      currentOutstanding,
+      totalOverdue,
+      grossProfit,
+      platformFee,
+      netProfit,
+      totalPenaltyAccrued,
+      recoveryRate,
+      collectionRate,
+      paidToday,
+      missedToday,
+      partialToday,
+      advanceToday,
+      overdueBorrowers,
+      averageExpectedReturnPerLoan: toNumber(summary?.averageExpectedReturnPerLoan),
+    };
+  }, [summary]);
 
   const repaymentStatusChartData = useMemo(() => {
-    if (!summary) return [];
     return [
-      { name: "Paid Today", value: summary.paidToday || 0 },
-      { name: "Missed Today", value: summary.missedToday || 0 },
-      { name: "Partial Today", value: summary.partialToday || 0 },
-      { name: "Advance Today", value: summary.advanceToday || 0 },
+      { name: "Paid Today", value: metrics.paidToday },
+      { name: "Missed Today", value: metrics.missedToday },
+      { name: "Partial Today", value: metrics.partialToday },
+      { name: "Advance Today", value: metrics.advanceToday },
     ];
-  }, [summary]);
+  }, [metrics]);
 
   const planChartData = useMemo(() => {
     return planPerformance.map((item) => ({
-      name: item.planName,
-      disbursed: item.totalDisbursed || 0,
-      collected: item.totalCollected || 0,
-      outstanding: item.totalOutstanding || 0,
-      projectedProfit: item.projectedProfit || 0,
+      name: item.planName || `Plan ${item.planId || ""}`,
+      disbursed: toNumber(item.totalDisbursed),
+      collected: toNumber(item.totalCollected),
+      outstanding: toNumber(item.totalOutstanding),
+      projectedProfit: toNumber(item.projectedProfit),
     }));
   }, [planPerformance]);
 
   const borrowerRiskChartData = useMemo(() => {
     return borrowerRiskBreakdown.map((item) => ({
       name: item.borrowerName,
-      riskScore: item.riskScore || 0,
-      outstanding: item.currentOutstanding || 0,
+      riskScore: toNumber(item.riskScore),
+      outstanding: toNumber(item.currentOutstanding),
     }));
+  }, [borrowerRiskBreakdown]);
+
+  const delinquentBorrowers = useMemo(() => {
+    return [...borrowerRiskBreakdown]
+      .filter(
+        (item) =>
+          toNumber(item.currentOutstanding) > 0 ||
+          toNumber(item.totalMissedDays) > 0 ||
+          toNumber(item.totalLatePayments) > 0
+      )
+      .sort((a, b) => {
+        const overdueCompare = toNumber(b.currentOutstanding) - toNumber(a.currentOutstanding);
+        if (overdueCompare !== 0) return overdueCompare;
+        return toNumber(b.totalMissedDays) - toNumber(a.totalMissedDays);
+      });
   }, [borrowerRiskBreakdown]);
 
   async function loadDashboard() {
@@ -104,45 +248,40 @@ export default function LenderDashboard() {
         api.get(`/api/notifications/LENDER/${userId}`),
       ]);
 
-      const summaryResult = results[0];
-      const todayCollectionsResult = results[1];
-      const planPerformanceResult = results[2];
-      const borrowerRiskResult = results[3];
-      const walletResult = results[4];
-      const notificationsResult = results[5];
+      const [
+        summaryResult,
+        todayCollectionsResult,
+        planPerformanceResult,
+        borrowerRiskResult,
+        walletResult,
+        notificationsResult,
+      ] = results;
 
       if (summaryResult.status === "fulfilled") {
-        setSummary(summaryResult.value.data || null);
+        setSummary(getApiPayload(summaryResult.value) || null);
       }
 
       if (todayCollectionsResult.status === "fulfilled") {
-        setTodayCollections(todayCollectionsResult.value.data || []);
+        setTodayCollections(getApiPayload(todayCollectionsResult.value) || []);
       }
 
       if (planPerformanceResult.status === "fulfilled") {
-        setPlanPerformance(planPerformanceResult.value.data || []);
+        setPlanPerformance(getApiPayload(planPerformanceResult.value) || []);
       }
 
       if (borrowerRiskResult.status === "fulfilled") {
-        setBorrowerRiskBreakdown(borrowerRiskResult.value.data || []);
+        setBorrowerRiskBreakdown(getApiPayload(borrowerRiskResult.value) || []);
       }
 
       if (walletResult.status === "fulfilled") {
-        setWallet(walletResult.value.data || null);
+        setWallet(getApiPayload(walletResult.value) || null);
       }
 
       if (notificationsResult.status === "fulfilled") {
-        setNotifications(notificationsResult.value.data || []);
+        setNotifications(getApiPayload(notificationsResult.value) || []);
       }
 
-      const allFailed =
-        summaryResult.status === "rejected" &&
-        todayCollectionsResult.status === "rejected" &&
-        planPerformanceResult.status === "rejected" &&
-        borrowerRiskResult.status === "rejected" &&
-        walletResult.status === "rejected" &&
-        notificationsResult.status === "rejected";
-
+      const allFailed = results.every((result) => result.status === "rejected");
       if (allFailed) {
         throw new Error("Failed to load lender dashboard data.");
       }
@@ -187,80 +326,132 @@ export default function LenderDashboard() {
           Welcome, {displayName || "Lender"}
         </h2>
         <p className="mt-2 text-sm text-slate-500">
-          This page shows lender analytics, collections, borrower risk, wallet balance, and notifications.
+          This dashboard shows lender portfolio analytics, recovery performance, borrower risk, wallet state, and today’s collection activity.
         </p>
 
-{/*         <div className="flex flex-wrap gap-3"> */}
-{/*           <a */}
-{/*             href="/kyc" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Open KYC Center */}
-{/*           </a> */}
-{/*           <a */}
-{/*             href="/wallet" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Open Wallet */}
-{/*           </a> */}
-{/*           <a */}
-{/*             href="/location" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Open Location Center */}
-{/*           </a> */}
-{/*           <a */}
-{/*             href="/reports" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Open Reports Center */}
-{/*           </a> */}
-{/*           <a */}
-{/*             href="/notifications" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Open Notifications */}
-{/*           </a> */}
-{/*           <a */}
-{/*             href="/lender/loan-plans" */}
-{/*             className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" */}
-{/*           > */}
-{/*             Manage Loan Plans */}
-{/*           </a> */}
-{/*         </div> */}
-
         {error ? (
-          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+          <div className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
+          </div>
         ) : null}
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard
           title="Total Principal Disbursed"
-          value={summary?.totalPrincipalDisbursed ?? 0}
+          value={money(metrics.totalPrincipalDisbursed)}
           subtitle="Total amount released to borrowers"
         />
         <SummaryCard
           title="Total Collected"
-          value={summary?.totalCollected ?? 0}
-          subtitle="All repayments received"
+          value={money(metrics.totalCollected)}
+          subtitle="All repayments received so far"
         />
         <SummaryCard
-          title="Projected Profit"
-          value={summary?.projectedProfit ?? 0}
-          subtitle="Expected profit across current loan book"
+          title="Current Outstanding"
+          value={money(metrics.currentOutstanding)}
+          subtitle="Still pending from active loans"
         />
         <SummaryCard
           title="Wallet Balance"
-          value={wallet?.balance ?? 0}
+          value={money(wallet?.balance)}
           subtitle={wallet?.frozen ? "Wallet is frozen" : "Wallet is active"}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          title="Expected Total Repayment"
+          value={money(metrics.expectedTotalRepayment)}
+          subtitle="Portfolio expected collection"
+        />
+        <SummaryCard
+          title="Gross Profit Forecast"
+          value={money(metrics.grossProfit)}
+          subtitle="Before platform fee deduction"
+        />
+        <SummaryCard
+          title="Platform Fee"
+          value={money(metrics.platformFee)}
+          subtitle="Expected or accrued platform share"
+        />
+        <SummaryCard
+          title="Net Profit Forecast"
+          value={money(metrics.netProfit)}
+          subtitle="Estimated lender-side profit"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <SummaryCard
+          title="Total Loans"
+          value={metrics.totalLoans}
+          subtitle="All loans created by this lender"
+        />
+        <SummaryCard
+          title="Active Loans"
+          value={metrics.activeLoans}
+          subtitle="Still open for recovery"
+        />
+        <SummaryCard
+          title="Closed Loans"
+          value={metrics.closedLoans}
+          subtitle="Completed loans"
+        />
+        <SummaryCard
+          title="Overdue Borrowers"
+          value={metrics.overdueBorrowers}
+          subtitle="Borrowers needing attention"
+        />
+        <SummaryCard
+          title="Recovery Rate"
+          value={percent(metrics.recoveryRate)}
+          subtitle="Collected / principal disbursed"
+        />
+        <SummaryCard
+          title="Collection Rate"
+          value={percent(metrics.collectionRate)}
+          subtitle="Collected / expected repayment"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <SummaryCard
+          title="Paid Today"
+          value={metrics.paidToday}
+          subtitle="Full / late-full collections"
+        />
+        <SummaryCard
+          title="Missed Today"
+          value={metrics.missedToday}
+          subtitle="Missed repayment events"
+        />
+        <SummaryCard
+          title="Partial Today"
+          value={metrics.partialToday}
+          subtitle="Partial payment count"
+        />
+        <SummaryCard
+          title="Advance Today"
+          value={metrics.advanceToday}
+          subtitle="Advance / pre-closure events"
+        />
+        <SummaryCard
+          title="Penalty Accrued"
+          value={money(metrics.totalPenaltyAccrued)}
+          subtitle="Penalty total in portfolio"
+        />
+        <SummaryCard
+          title="Avg Profit / Loan"
+          value={money(metrics.averageExpectedReturnPerLoan)}
+          subtitle="Average expected return"
         />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="rounded-2xl bg-white p-6 shadow-sm xl:col-span-2">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-slate-900">Lender Summary</h3>
+            <h3 className="text-lg font-semibold text-slate-900">Portfolio Summary</h3>
             <button
               onClick={loadDashboard}
               className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
@@ -271,43 +462,43 @@ export default function LenderDashboard() {
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Total Loans</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.totalLoans ?? 0}</h4>
+              <p className="text-sm text-slate-500">Total Principal Disbursed</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.totalPrincipalDisbursed)}</h4>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Active Loans</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.activeLoans ?? 0}</h4>
+              <p className="text-sm text-slate-500">Total Collected</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.totalCollected)}</h4>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Closed Loans</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.closedLoans ?? 0}</h4>
+              <p className="text-sm text-slate-500">Expected Total Repayment</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.expectedTotalRepayment)}</h4>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Total Outstanding</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.totalOutstanding ?? 0}</h4>
+              <p className="text-sm text-slate-500">Current Outstanding</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.currentOutstanding)}</h4>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Penalty Collected</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.totalPenaltyCollected ?? 0}</h4>
-            </div>
-
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Recoverable Amount</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.recoverableAmount ?? 0}</h4>
-            </div>
-
-            <div className="rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Capital Ready For Reuse</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.capitalReadyForReuse ?? 0}</h4>
+              <p className="text-sm text-slate-500">Total Overdue</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.totalOverdue)}</h4>
             </div>
 
             <div className="rounded-2xl bg-slate-50 p-4">
               <p className="text-sm text-slate-500">Overdue Borrowers</p>
-              <h4 className="mt-2 text-xl font-semibold text-slate-900">{summary?.overdueBorrowers ?? 0}</h4>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{metrics.overdueBorrowers}</h4>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Gross Profit Forecast</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.grossProfit)}</h4>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Net Profit Forecast</p>
+              <h4 className="mt-2 text-xl font-semibold text-slate-900">{money(metrics.netProfit)}</h4>
             </div>
           </div>
         </div>
@@ -321,7 +512,7 @@ export default function LenderDashboard() {
           <div className="space-y-3">
             {notifications.length === 0 ? (
               <p className="text-sm text-slate-500">
-                No notifications yet. Later we will wire repayment, blacklist, freeze, approval, and scheduler notifications here.
+                No notifications yet.
               </p>
             ) : (
               notifications.map((item) => (
@@ -336,7 +527,7 @@ export default function LenderDashboard() {
                       <h4 className="font-semibold text-slate-900">{item.title}</h4>
                       <p className="mt-1 text-sm text-slate-600">{item.message}</p>
                       <p className="mt-2 text-xs text-slate-500">
-                        {item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}
+                        {item.createdAt ? formatDateTime(item.createdAt) : ""}
                       </p>
                     </div>
 
@@ -452,11 +643,11 @@ export default function LenderDashboard() {
                   <tr key={`${item.loanId}-${index}`} className="border-b border-slate-100">
                     <td className="px-3 py-3 text-slate-700">{item.borrowerName}</td>
                     <td className="px-3 py-3 text-slate-700">{item.loanId}</td>
-                    <td className="px-3 py-3 text-slate-700">{item.amountPaid}</td>
+                    <td className="px-3 py-3 text-slate-700">{money(item.amountPaid)}</td>
                     <td className="px-3 py-3 text-slate-700">{item.paymentMode}</td>
                     <td className="px-3 py-3 text-slate-700">{item.paymentStatus}</td>
                     <td className="px-3 py-3 text-slate-700">{item.paymentDate}</td>
-                    <td className="px-3 py-3 text-slate-700">{item.balanceAmount}</td>
+                    <td className="px-3 py-3 text-slate-700">{money(item.balanceAmount)}</td>
                   </tr>
                 ))
               )}
@@ -467,8 +658,8 @@ export default function LenderDashboard() {
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Borrower Risk Table</h3>
-          <p className="text-sm text-slate-500">Borrowers connected to this lender</p>
+          <h3 className="text-lg font-semibold text-slate-900">Delinquent Borrowers</h3>
+          <p className="text-sm text-slate-500">People who missed payments / still owe money</p>
         </div>
 
         <div className="overflow-x-auto">
@@ -486,21 +677,32 @@ export default function LenderDashboard() {
               </tr>
             </thead>
             <tbody>
-              {borrowerRiskBreakdown.length === 0 ? (
+              {delinquentBorrowers.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="px-3 py-6 text-center text-slate-500">
-                    No borrower risk records available.
+                    No delinquent borrower records available.
                   </td>
                 </tr>
               ) : (
-                borrowerRiskBreakdown.map((item) => (
+                delinquentBorrowers.map((item) => (
                   <tr key={item.borrowerId} className="border-b border-slate-100">
                     <td className="px-3 py-3 text-slate-700">{item.borrowerName}</td>
                     <td className="px-3 py-3 text-slate-700">{item.internalCreditScore}</td>
                     <td className="px-3 py-3 text-slate-700">{item.riskScore}</td>
-                    <td className="px-3 py-3 text-slate-700">{item.riskCategory}</td>
+                    <td className="px-3 py-3 text-slate-700">
+                      <StatusPill
+                        text={item.riskCategory}
+                        tone={
+                          item.riskCategory === "HIGH"
+                            ? "red"
+                            : item.riskCategory === "MEDIUM"
+                            ? "yellow"
+                            : "green"
+                        }
+                      />
+                    </td>
                     <td className="px-3 py-3 text-slate-700">{item.totalLoansWithLender}</td>
-                    <td className="px-3 py-3 text-slate-700">{item.currentOutstanding}</td>
+                    <td className="px-3 py-3 text-slate-700">{money(item.currentOutstanding)}</td>
                     <td className="px-3 py-3 text-slate-700">{item.totalMissedDays}</td>
                     <td className="px-3 py-3 text-slate-700">{item.totalLatePayments}</td>
                   </tr>

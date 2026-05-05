@@ -6,5 +6,6 @@ import com.unqiuehire.kashflow.dto.responsedto.BorrowerAnalyticsSummaryResponseD
 public interface BorrowerAnalyticsService {
 
     ApiResponse<BorrowerAnalyticsSummaryResponseDto> getBorrowerSummary(Long borrowerId);
-}
 
+    BorrowerAnalyticsSummaryResponseDto refreshBorrowerDerivedFields(Long borrowerId);
+}

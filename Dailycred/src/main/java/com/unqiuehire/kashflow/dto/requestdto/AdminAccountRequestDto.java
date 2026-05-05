@@ -14,4 +14,6 @@ public class AdminAccountRequestDto {
 
     private Boolean notificationEnabled;
     private Boolean emailNotificationsEnabled;
+
+
 }

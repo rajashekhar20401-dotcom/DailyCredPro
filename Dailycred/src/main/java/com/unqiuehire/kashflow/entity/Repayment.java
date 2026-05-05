@@ -50,6 +50,7 @@ public class Repayment {
     private Boolean isPreClosure;
 
     private Double interestAdded;
+    private Double interestRebateApplied;
     private Double penaltyAmount;
     private Integer missedDays;
     private Double balanceAmount;

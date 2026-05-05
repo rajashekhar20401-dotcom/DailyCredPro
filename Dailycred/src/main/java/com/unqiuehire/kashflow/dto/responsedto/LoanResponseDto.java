@@ -35,6 +35,10 @@ public class LoanResponseDto {
     private Integer advancePaidDaysCount;
     private LocalDate nextDueDate;
 
+    private Double dailyInterestAmount;
+    private Double totalInterestRebateAmount;
+    private Double effectiveTotalRepayableAmount;
+
     private Double platformFeeRate;
     private Double platformFeeAmount;
     private Boolean platformFeeCharged;

@@ -7,8 +7,8 @@ import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
 import com.unqiuehire.kashflow.dto.responsedto.BorrowerResponseDto;
 import com.unqiuehire.kashflow.entity.Borrower;
 import com.unqiuehire.kashflow.repository.BorrowerRepository;
+import com.unqiuehire.kashflow.service.BorrowerAnalyticsService;
 import com.unqiuehire.kashflow.service.BorrowerService;
-import com.unqiuehire.kashflow.service.InternalCreditScoreService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -16,7 +16,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -26,7 +25,7 @@ import java.util.stream.Collectors;
 public class BorrowerServiceImpl implements BorrowerService {
 
     private final BorrowerRepository repo;
-    private final InternalCreditScoreService internalCreditScoreService;
+    private final BorrowerAnalyticsService borrowerAnalyticsService;
     private final PasswordEncoder passwordEncoder;
     // private final NotificationService notificationService;
 
@@ -65,13 +64,17 @@ public class BorrowerServiceImpl implements BorrowerService {
         borrower.setPhoneNumber(phone);
         borrower.setEmail(email);
 
-        syncGeneratedCreditScore(borrower);
-
         Borrower savedBorrower = repo.save(borrower);
+
+        // Single source of truth: derive score/risk/eligibility only from analytics service
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(savedBorrower.getBorrowerId());
+
+        Borrower updatedBorrower = repo.findById(savedBorrower.getBorrowerId())
+                .orElseThrow(() -> new RuntimeException("Borrower not found after creation"));
 
 //        notificationService.createNotification(
 //                NotificationTargetType.BORROWER,
-//                savedBorrower.getBorrowerId(),
+//                updatedBorrower.getBorrowerId(),
 //                NotificationChannelType.IN_APP,
 //                "Borrower Account Created",
 //                "Your borrower account has been created successfully."
@@ -80,7 +83,7 @@ public class BorrowerServiceImpl implements BorrowerService {
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,
                 BorrowerConstants.BORROWER_CREATED.getMessage(),
-                mapToResponse(savedBorrower)
+                mapToResponse(updatedBorrower)
         );
     }
 
@@ -177,7 +180,6 @@ public class BorrowerServiceImpl implements BorrowerService {
         existingBorrower.setPincode(borrowerRequestDto.getPincode().trim());
         existingBorrower.setAddress(borrowerRequestDto.getAddress().trim());
 
-        // do not trust request-side cibil anymore; generated score will overwrite it
         existingBorrower.setAadharCardNumber(aadhar);
         existingBorrower.setPanCardNumber(pan);
 
@@ -207,9 +209,12 @@ public class BorrowerServiceImpl implements BorrowerService {
 
         existingBorrower.setTermsVersion(normalize(borrowerRequestDto.getTermsVersion()));
 
-        syncGeneratedCreditScore(existingBorrower);
+        Borrower savedBorrower = repo.save(existingBorrower);
 
-        Borrower updatedBorrower = repo.save(existingBorrower);
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(savedBorrower.getBorrowerId());
+
+        Borrower updatedBorrower = repo.findById(savedBorrower.getBorrowerId())
+                .orElseThrow(() -> new RuntimeException("Borrower not found after update"));
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,
@@ -311,7 +316,6 @@ public class BorrowerServiceImpl implements BorrowerService {
         borrower.setPincode(borrowerRequestDto.getPincode().trim());
         borrower.setAddress(borrowerRequestDto.getAddress().trim());
 
-        // do not trust request-side cibil anymore; generated score will overwrite it
         borrower.setAadharCardNumber(normalize(borrowerRequestDto.getAadharCardNumber()));
         borrower.setPanCardNumber(normalize(borrowerRequestDto.getPanCardNumber()));
 
@@ -337,127 +341,28 @@ public class BorrowerServiceImpl implements BorrowerService {
         borrower.setTermsAcceptedAt(Boolean.TRUE.equals(borrowerRequestDto.getTermsAccepted()) ? LocalDateTime.now() : null);
         borrower.setTermsVersion(normalize(borrowerRequestDto.getTermsVersion()));
 
+        // Safe defaults for persisted derived/cache fields.
+        borrower.setCibil(0);
+        borrower.setInternalCreditScore(0);
         borrower.setRiskScore(0);
         borrower.setRiskCategory("UNKNOWN");
         borrower.setEligibilityScore(0);
         borrower.setEligibilityTier("UNASSIGNED");
         borrower.setEligibilityStatus("PENDING_REVIEW");
         borrower.setMaxEligibleLoanAmount(BigDecimal.ZERO);
-        borrower.setCurrentOutstandingAmount(borrower.getCurrentOutstandingAmount() == null ? BigDecimal.ZERO : borrower.getCurrentOutstandingAmount());
-        borrower.setActiveLoanCount(borrower.getActiveLoanCount() == null ? 0 : borrower.getActiveLoanCount());
-        borrower.setTotalLoansTaken(borrower.getTotalLoansTaken() == null ? 0 : borrower.getTotalLoansTaken());
-        borrower.setLoansClosedSuccessfully(borrower.getLoansClosedSuccessfully() == null ? 0 : borrower.getLoansClosedSuccessfully());
-        borrower.setLoansClosedEarly(borrower.getLoansClosedEarly() == null ? 0 : borrower.getLoansClosedEarly());
-        borrower.setTotalMissedDays(borrower.getTotalMissedDays() == null ? 0 : borrower.getTotalMissedDays());
-        borrower.setTotalPartialDays(borrower.getTotalPartialDays() == null ? 0 : borrower.getTotalPartialDays());
-        borrower.setTotalAdvanceDays(borrower.getTotalAdvanceDays() == null ? 0 : borrower.getTotalAdvanceDays());
-        borrower.setTotalLatePayments(borrower.getTotalLatePayments() == null ? 0 : borrower.getTotalLatePayments());
-        borrower.setMaxConsecutiveMissedDays(borrower.getMaxConsecutiveMissedDays() == null ? 0 : borrower.getMaxConsecutiveMissedDays());
-        borrower.setDefaultedLoanCount(borrower.getDefaultedLoanCount() == null ? 0 : borrower.getDefaultedLoanCount());
+        borrower.setCurrentOutstandingAmount(BigDecimal.ZERO);
+        borrower.setActiveLoanCount(0);
+        borrower.setTotalLoansTaken(0);
+        borrower.setLoansClosedSuccessfully(0);
+        borrower.setLoansClosedEarly(0);
+        borrower.setTotalMissedDays(0);
+        borrower.setTotalPartialDays(0);
+        borrower.setTotalAdvanceDays(0);
+        borrower.setTotalLatePayments(0);
+        borrower.setMaxConsecutiveMissedDays(0);
+        borrower.setDefaultedLoanCount(0);
 
         return borrower;
-    }
-
-    private void syncGeneratedCreditScore(Borrower borrower) {
-        int generatedScore = internalCreditScoreService.calculateInternalCreditScore(
-                borrower,
-                Collections.emptyList(),
-                Collections.emptyList()
-        );
-
-        borrower.setInternalCreditScore(generatedScore);
-        borrower.setCibil(generatedScore);
-        borrower.setEligibilityScore(generatedScore);
-
-        int riskScore = calculateRiskScore(borrower, generatedScore);
-        borrower.setRiskScore(riskScore);
-
-        if (riskScore >= 70) {
-            borrower.setRiskCategory("LOW");
-        } else if (riskScore >= 40) {
-            borrower.setRiskCategory("MEDIUM");
-        } else {
-            borrower.setRiskCategory("HIGH");
-        }
-
-        BigDecimal monthlyIncome = borrower.getMonthlyIncome() == null ? BigDecimal.ZERO : borrower.getMonthlyIncome();
-        int activeLoans = borrower.getActiveLoanCount() == null ? 0 : borrower.getActiveLoanCount();
-        int totalMissedDays = borrower.getTotalMissedDays() == null ? 0 : borrower.getTotalMissedDays();
-        boolean blacklisted = Boolean.TRUE.equals(borrower.getBlacklisted());
-        boolean fraudFlag = Boolean.TRUE.equals(borrower.getFraudFlag());
-        boolean kycVerified = Boolean.TRUE.equals(borrower.getKycVerified());
-
-        if (blacklisted || fraudFlag) {
-            borrower.setEligibilityTier("BLOCKED");
-            borrower.setEligibilityStatus("NOT_ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.ZERO);
-            return;
-        }
-
-        if (!kycVerified) {
-            borrower.setEligibilityTier("KYC_PENDING");
-            borrower.setEligibilityStatus("PENDING_REVIEW");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.ZERO);
-            return;
-        }
-
-        if (activeLoans >= 3) {
-            borrower.setEligibilityTier("ACTIVE_LOAN_LIMIT");
-            borrower.setEligibilityStatus("NOT_ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.ZERO);
-            return;
-        }
-
-        if (generatedScore >= 80 && riskScore >= 70 && monthlyIncome.compareTo(BigDecimal.valueOf(50000)) >= 0) {
-            borrower.setEligibilityTier("PREMIUM");
-            borrower.setEligibilityStatus("ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(500000));
-        } else if (generatedScore >= 65 && riskScore >= 55 && monthlyIncome.compareTo(BigDecimal.valueOf(30000)) >= 0) {
-            borrower.setEligibilityTier("STANDARD");
-            borrower.setEligibilityStatus("ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(300000));
-        } else if (generatedScore >= 50 && riskScore >= 40 && monthlyIncome.compareTo(BigDecimal.valueOf(20000)) >= 0) {
-            borrower.setEligibilityTier("BASIC");
-            borrower.setEligibilityStatus("ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(100000));
-        } else if (generatedScore >= 35 && totalMissedDays <= 10) {
-            borrower.setEligibilityTier("LOW_LIMIT");
-            borrower.setEligibilityStatus("COLLATERAL_REQUIRED");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(50000));
-        } else {
-            borrower.setEligibilityTier("HIGH_RISK");
-            borrower.setEligibilityStatus("NOT_ELIGIBLE");
-            borrower.setMaxEligibleLoanAmount(BigDecimal.ZERO);
-        }
-    }
-
-    private int calculateRiskScore(Borrower borrower, int generatedScore) {
-        int riskScore = generatedScore;
-
-        int totalMissedDays = borrower.getTotalMissedDays() == null ? 0 : borrower.getTotalMissedDays();
-        int totalLatePayments = borrower.getTotalLatePayments() == null ? 0 : borrower.getTotalLatePayments();
-        int defaultedLoanCount = borrower.getDefaultedLoanCount() == null ? 0 : borrower.getDefaultedLoanCount();
-        int activeLoanCount = borrower.getActiveLoanCount() == null ? 0 : borrower.getActiveLoanCount();
-        int maxConsecutiveMissedDays = borrower.getMaxConsecutiveMissedDays() == null ? 0 : borrower.getMaxConsecutiveMissedDays();
-
-        riskScore -= Math.min(25, totalMissedDays);
-        riskScore -= Math.min(15, totalLatePayments * 2);
-        riskScore -= Math.min(20, defaultedLoanCount * 10);
-        riskScore -= Math.min(15, activeLoanCount * 5);
-        riskScore -= Math.min(15, maxConsecutiveMissedDays);
-
-        if (Boolean.TRUE.equals(borrower.getFraudFlag())) {
-            riskScore -= 30;
-        }
-
-        if (Boolean.TRUE.equals(borrower.getBlacklisted())) {
-            riskScore -= 25;
-        }
-
-        if (riskScore < 0) riskScore = 0;
-        if (riskScore > 100) riskScore = 100;
-
-        return riskScore;
     }
 
     private ApiResponse<BorrowerResponseDto> validateBorrowerRequest(BorrowerRequestDto borrowerRequestDto) {

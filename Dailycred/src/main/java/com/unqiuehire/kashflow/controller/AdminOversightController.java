@@ -84,4 +84,29 @@ public class AdminOversightController {
     public ApiResponse<String> unfreezeWallet(@PathVariable WalletOwnerType ownerType, @PathVariable Long ownerId) {
         return adminOversightService.unfreezeWallet(ownerType, ownerId);
     }
+
+    @PostMapping("/admins/{adminId}/global-borrower-policy")
+    public ApiResponse<String> updateGlobalBorrowerPolicy(
+            @PathVariable Long adminId,
+            @RequestBody AdminActionRequestDto requestDto
+    ) {
+        return adminOversightService.updateGlobalBorrowerPolicy(adminId, requestDto);
+    }
+
+    @PostMapping("/admins/{adminId}/borrowers/{borrowerId}/override")
+    public ApiResponse<String> updateBorrowerOverride(
+            @PathVariable Long adminId,
+            @PathVariable Long borrowerId,
+            @RequestBody AdminActionRequestDto requestDto
+    ) {
+        return adminOversightService.updateBorrowerOverride(adminId, borrowerId, requestDto);
+    }
+
+    @PostMapping("/admins/{adminId}/borrowers/{borrowerId}/clear-override")
+    public ApiResponse<String> clearBorrowerOverride(
+            @PathVariable Long adminId,
+            @PathVariable Long borrowerId
+    ) {
+        return adminOversightService.clearBorrowerOverride(adminId, borrowerId);
+    }
 }

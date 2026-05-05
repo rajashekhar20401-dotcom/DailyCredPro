@@ -70,25 +70,41 @@ function getPlanPreview(plan) {
   };
 }
 
+function normalizeText(value) {
+  return value == null ? "" : String(value).trim().toUpperCase();
+}
+
 function getEligibility(plan, borrowerProfile, borrowerAnalytics) {
   const reasons = [];
 
-  if (!plan || plan.status !== "ACTIVE") {
+  const eligibilityStatus = normalizeText(borrowerAnalytics?.eligibilityStatus);
+  const riskCategory = normalizeText(borrowerAnalytics?.riskCategory);
+  const allowedActiveLoanLimit = Number(borrowerAnalytics?.allowedActiveLoanLimit ?? 0);
+  const remainingActiveLoanSlots = Number(borrowerAnalytics?.remainingActiveLoanSlots ?? 0);
+  const activeLoans = Number(borrowerAnalytics?.activeLoans ?? 0);
+  const maxEligibleLoanAmount = Number(borrowerAnalytics?.maxEligibleLoanAmount ?? 0);
+
+  if (!plan || normalizeText(plan.status) !== "ACTIVE") {
     reasons.push("Plan is not active.");
   }
 
-  const activeLoans = borrowerAnalytics?.activeLoans ?? 0;
-  if (activeLoans >= 3) {
-    reasons.push("Finish current active loans first.");
+  if (allowedActiveLoanLimit > 0 && activeLoans >= allowedActiveLoanLimit) {
+    reasons.push(`You already reached your active loan limit of ${allowedActiveLoanLimit}.`);
   }
 
-  const maxEligibleLoanAmount = Number(borrowerAnalytics?.maxEligibleLoanAmount ?? 0);
+  if (remainingActiveLoanSlots <= 0) {
+    reasons.push("No active loan slots remaining.");
+  }
+
   if (maxEligibleLoanAmount > 0 && Number(plan.amount) > maxEligibleLoanAmount) {
-    reasons.push("This plan is above your current eligible loan range.");
+    reasons.push(`This plan exceeds your current eligible cap of ${maxEligibleLoanAmount}.`);
   }
 
-  if (borrowerAnalytics?.riskCategory === "HIGH" && Number(plan.amount) > 100000) {
-    reasons.push("High risk borrowers can only access lower loan amounts.");
+  if (
+    eligibilityStatus === "NOT_ELIGIBLE" ||
+    eligibilityStatus === "PENDING_REVIEW"
+  ) {
+    reasons.push(`Borrower status is currently ${eligibilityStatus}.`);
   }
 
   const borrowerIncome = Number(borrowerProfile?.monthlyIncome ?? 0);
@@ -105,15 +121,9 @@ function getEligibility(plan, borrowerProfile, borrowerAnalytics) {
     reasons.push("Borrower age is above the allowed maximum.");
   }
 
-  if (
-    borrowerAnalytics?.eligibilityStatus &&
-    borrowerAnalytics.eligibilityStatus !== "ELIGIBLE" &&
-    borrowerAnalytics.eligibilityStatus !== "APPROVED" &&
-    borrowerAnalytics.eligibilityStatus !== "APPROVED_WITH_LIMIT" &&
-    borrowerAnalytics.eligibilityStatus !== "APPROVED_SMALL_LIMIT" &&
-    borrowerAnalytics.eligibilityStatus !== "COLLATERAL_REQUIRED"
-  ) {
-    reasons.push("Borrower is currently not eligible.");
+  // Keep this only as an extra caution rule.
+  if (riskCategory === "HIGH" && Number(plan.amount) > maxEligibleLoanAmount && maxEligibleLoanAmount > 0) {
+    reasons.push("High-risk profile cannot access plans above the current cap.");
   }
 
   return {
@@ -164,8 +174,8 @@ export default function BorrowerLoanApplicationPage() {
   const collateralRequiredForCurrentBorrower = useMemo(() => {
     return (
       borrowerAnalytics?.collateralRequired === true ||
-      borrowerAnalytics?.riskCategory === "HIGH" ||
-      borrowerAnalytics?.eligibilityStatus === "COLLATERAL_REQUIRED"
+      normalizeText(borrowerAnalytics?.eligibilityStatus) === "COLLATERAL_REQUIRED" ||
+      normalizeText(borrowerAnalytics?.riskCategory) === "HIGH"
     );
   }, [borrowerAnalytics]);
 
@@ -214,7 +224,7 @@ export default function BorrowerLoanApplicationPage() {
       if (showMessage) {
         setMessage("Borrower applications refreshed successfully.");
       }
-    } catch (err) {
+    } catch {
       setApplications([]);
     } finally {
       setLoadingApplications(false);
@@ -255,13 +265,13 @@ export default function BorrowerLoanApplicationPage() {
     });
   }
 
- async function saveBorrowerLocation(latitude, longitude) {
-   await api.put(`/api/location/borrowers/${userId}`, {
-     latitude,
-     longitude,
-     consentGiven: true,
-   });
- }
+  async function saveBorrowerLocation(latitude, longitude) {
+    await api.put(`/api/location/borrowers/${userId}`, {
+      latitude,
+      longitude,
+      consentGiven: true,
+    });
+  }
 
   async function findNearbyLenders() {
     setLoadingNearby(true);
@@ -344,6 +354,12 @@ export default function BorrowerLoanApplicationPage() {
       return;
     }
 
+    const eligibilityCheck = getEligibility(selectedPlan, borrowerProfile, borrowerAnalytics);
+    if (!eligibilityCheck.eligible) {
+      setPageError(eligibilityCheck.reasons[0] || "You are not eligible for this plan.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -365,6 +381,7 @@ export default function BorrowerLoanApplicationPage() {
 
       setMessage(response.data?.message || "Loan application submitted successfully.");
       await loadBorrowerApplications(false);
+      await loadBorrowerContext();
     } catch (err) {
       setPageError(err.response?.data?.message || err.message || "Failed to submit loan application.");
     } finally {
@@ -394,7 +411,7 @@ export default function BorrowerLoanApplicationPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <SummaryCard
           title="Internal Score"
           value={borrowerAnalytics?.internalCreditScore ?? 0}
@@ -403,18 +420,52 @@ export default function BorrowerLoanApplicationPage() {
         <SummaryCard
           title="Risk Category"
           value={borrowerAnalytics?.riskCategory || "UNKNOWN"}
-          subtitle={borrowerAnalytics?.recommendation || "No recommendation"}
+          subtitle={`Risk Score: ${borrowerAnalytics?.riskScore ?? 0}`}
         />
         <SummaryCard
-          title="Active Loans"
-          value={borrowerAnalytics?.activeLoans ?? 0}
-          subtitle="High active loan count blocks new approvals"
+          title="Eligibility"
+          value={borrowerAnalytics?.eligibilityTier || "UNASSIGNED"}
+          subtitle={borrowerAnalytics?.eligibilityStatus || "PENDING_REVIEW"}
         />
         <SummaryCard
           title="Max Eligible Amount"
           value={borrowerAnalytics?.maxEligibleLoanAmount ?? 0}
-          subtitle="Plans above this amount are hidden"
+          subtitle="Current borrower limit"
         />
+        <SummaryCard
+          title="Loan Limit"
+          value={borrowerAnalytics?.allowedActiveLoanLimit ?? 0}
+          subtitle={`Active loans: ${borrowerAnalytics?.activeLoans ?? 0}`}
+        />
+        <SummaryCard
+          title="Remaining Slots"
+          value={borrowerAnalytics?.remainingActiveLoanSlots ?? 0}
+          subtitle={borrowerAnalytics?.collateralRequired ? "Collateral likely required" : "Standard flow available"}
+        />
+      </div>
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <h3 className="mb-3 text-lg font-semibold text-slate-900">Current Restrictions</h3>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Allowed Active Loans</p>
+            <p className="mt-1">{borrowerAnalytics?.allowedActiveLoanLimit ?? 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Remaining Loan Slots</p>
+            <p className="mt-1">{borrowerAnalytics?.remainingActiveLoanSlots ?? 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Collateral Requirement</p>
+            <p className="mt-1">
+              {borrowerAnalytics?.collateralRequired ? "Required / likely required" : "Not required right now"}
+            </p>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-medium text-slate-900">Recommendation</p>
+            <p className="mt-1">{borrowerAnalytics?.recommendation || "No recommendation available."}</p>
+          </div>
+        </div>
       </div>
 
       {(message || pageError) && (
@@ -486,9 +537,31 @@ export default function BorrowerLoanApplicationPage() {
         ) : !selectedLender ? (
           <p className="text-sm text-slate-500">Select a nearby lender first.</p>
         ) : eligiblePlans.length === 0 ? (
-          <p className="text-sm text-red-600">
-            No eligible plans are visible for this borrower under the current platform eligibility rules.
-          </p>
+          <div className="space-y-3">
+            <p className="text-sm text-red-600">
+              No eligible plans are visible for this borrower under the current platform eligibility rules.
+            </p>
+
+            {lenderPlans.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {lenderPlans.map((plan) => {
+                  const check = getEligibility(plan, borrowerProfile, borrowerAnalytics);
+                  return (
+                    <div key={plan.id} className="rounded-xl border border-slate-200 p-4 text-sm">
+                      <p className="font-medium text-slate-900">
+                        {plan.planName} — {plan.amount}
+                      </p>
+                      <ul className="mt-2 list-disc space-y-1 pl-5 text-red-600">
+                        {check.reasons.map((reason, index) => (
+                          <li key={`${plan.id}-${index}`}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {eligiblePlans.map((plan) => {
@@ -650,11 +723,10 @@ export default function BorrowerLoanApplicationPage() {
                     value={form.collateral}
                     onChange={handleChange}
                     className="w-full rounded-xl border border-slate-300 px-3 py-2"
-                    placeholder="Gold / land proof / vehicle documents"
+                    placeholder="Gold / bond / land proof / vehicle documents"
                   />
                   <p className="mt-1 text-xs text-amber-700">
-                    Collateral is required because this borrower profile is currently marked as higher risk or
-                    early-stage weak-history.
+                    Collateral is required because your current eligibility status requires collateral-backed lending.
                   </p>
                 </div>
               ) : null}

@@ -28,6 +28,7 @@ public class RepaymentResponseDTO {
     private Boolean isPreClosure;
 
     private Double interestAdded;
+    private Double interestRebateApplied;
     private Double penaltyAmount;
     private Integer missedDays;
 

@@ -4,15 +4,20 @@ import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.WalletOwnerType;
 import com.unqiuehire.kashflow.dto.requestdto.AdminActionRequestDto;
 import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
+import com.unqiuehire.kashflow.entity.AdminAccount;
 import com.unqiuehire.kashflow.entity.Borrower;
 import com.unqiuehire.kashflow.entity.Lender;
+import com.unqiuehire.kashflow.repository.AdminAccountRepository;
 import com.unqiuehire.kashflow.repository.BorrowerRepository;
 import com.unqiuehire.kashflow.repository.LenderRepository;
 import com.unqiuehire.kashflow.service.AdminOversightService;
+import com.unqiuehire.kashflow.service.BorrowerAnalyticsService;
 import com.unqiuehire.kashflow.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +25,8 @@ public class AdminOversightServiceImpl implements AdminOversightService {
 
     private final BorrowerRepository borrowerRepository;
     private final LenderRepository lenderRepository;
+    private final AdminAccountRepository adminAccountRepository;
+    private final BorrowerAnalyticsService borrowerAnalyticsService;
     private final WalletService walletService;
 
     @Override
@@ -85,6 +92,8 @@ public class AdminOversightServiceImpl implements AdminOversightService {
         borrower.setFraudReason(safeReason(requestDto));
         borrowerRepository.save(borrower);
 
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
+
         return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower fraud flag applied", "Borrower fraud flag applied");
     }
 
@@ -97,6 +106,8 @@ public class AdminOversightServiceImpl implements AdminOversightService {
         borrower.setFraudFlag(false);
         borrower.setFraudReason(null);
         borrowerRepository.save(borrower);
+
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower fraud flag cleared", "Borrower fraud flag cleared");
     }
@@ -139,6 +150,8 @@ public class AdminOversightServiceImpl implements AdminOversightService {
         borrower.setFraudReason(safeReason(requestDto));
         borrowerRepository.save(borrower);
 
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
+
         return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower blacklisted", "Borrower blacklisted");
     }
 
@@ -150,6 +163,8 @@ public class AdminOversightServiceImpl implements AdminOversightService {
 
         borrower.setBlacklisted(false);
         borrowerRepository.save(borrower);
+
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower blacklist removed", "Borrower blacklist removed");
     }
@@ -192,10 +207,128 @@ public class AdminOversightServiceImpl implements AdminOversightService {
         return new ApiResponse<>(ApiStatus.SUCCESS, "Wallet unfrozen successfully", "Wallet unfrozen successfully");
     }
 
+    @Override
+    @Transactional
+    public ApiResponse<String> updateGlobalBorrowerPolicy(Long adminId, AdminActionRequestDto requestDto) {
+        AdminAccount admin = adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new RuntimeException("Admin not found"));
+
+        if (requestDto.getDefaultMaxActiveLoans() != null) {
+            admin.setDefaultMaxActiveLoans(requestDto.getDefaultMaxActiveLoans());
+        }
+
+        if (requestDto.getDefaultMaxEligibleLoanAmount() != null) {
+            admin.setDefaultMaxEligibleLoanAmount(requestDto.getDefaultMaxEligibleLoanAmount());
+        }
+
+        if (requestDto.getPremiumMaxEligibleLoanAmount() != null) {
+            admin.setPremiumMaxEligibleLoanAmount(requestDto.getPremiumMaxEligibleLoanAmount());
+        }
+
+        if (requestDto.getStandardMaxEligibleLoanAmount() != null) {
+            admin.setStandardMaxEligibleLoanAmount(requestDto.getStandardMaxEligibleLoanAmount());
+        }
+
+        if (requestDto.getBasicMaxEligibleLoanAmount() != null) {
+            admin.setBasicMaxEligibleLoanAmount(requestDto.getBasicMaxEligibleLoanAmount());
+        }
+
+        if (requestDto.getLowLimitMaxEligibleLoanAmount() != null) {
+            admin.setLowLimitMaxEligibleLoanAmount(requestDto.getLowLimitMaxEligibleLoanAmount());
+        }
+
+        if (requestDto.getDefaultBorrowerRadiusKm() != null) {
+            admin.setDefaultBorrowerRadiusKm(requestDto.getDefaultBorrowerRadiusKm());
+        }
+
+        if (requestDto.getDefaulterConsecutiveMissedDays() != null) {
+            admin.setDefaulterConsecutiveMissedDays(requestDto.getDefaulterConsecutiveMissedDays());
+        }
+
+        if (requestDto.getPenaltyTriggerMissedDays() != null) {
+            admin.setPenaltyTriggerMissedDays(requestDto.getPenaltyTriggerMissedDays());
+        }
+
+        if (requestDto.getPenaltyTriggerPartialDays() != null) {
+            admin.setPenaltyTriggerPartialDays(requestDto.getPenaltyTriggerPartialDays());
+        }
+
+        if (requestDto.getPenaltyPercentOfDailyInterest() != null) {
+            admin.setPenaltyPercentOfDailyInterest(requestDto.getPenaltyPercentOfDailyInterest());
+        }
+
+        if (requestDto.getPlatformFeePercent() != null) {
+            admin.setPlatformFeePercent(requestDto.getPlatformFeePercent());
+        }
+
+        if (requestDto.getManualReviewRiskThreshold() != null) {
+            admin.setManualReviewRiskThreshold(requestDto.getManualReviewRiskThreshold());
+        }
+
+        adminAccountRepository.save(admin);
+
+        return new ApiResponse<>(ApiStatus.SUCCESS, "Global borrower policy updated successfully", "Global borrower policy updated successfully");
+    }
+
+    @Override
+    @Transactional
+    public ApiResponse<String> updateBorrowerOverride(Long adminId, Long borrowerId, AdminActionRequestDto requestDto) {
+        AdminAccount admin = adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new RuntimeException("Admin not found"));
+
+        Borrower borrower = borrowerRepository.findById(borrowerId)
+                .orElseThrow(() -> new RuntimeException("Borrower not found"));
+
+        borrower.setOverrideMaxActiveLoans(requestDto.getOverrideMaxActiveLoans());
+        borrower.setOverrideMaxEligibleLoanAmount(requestDto.getOverrideMaxEligibleLoanAmount());
+        borrower.setOverrideEligibilityTier(safeText(requestDto.getOverrideEligibilityTier()));
+        borrower.setOverrideEligibilityStatus(safeText(requestDto.getOverrideEligibilityStatus()));
+        borrower.setOverrideReason(safeReason(requestDto));
+        borrower.setOverrideUpdatedByAdminId(admin.getAdminId());
+        borrower.setOverrideUpdatedAt(LocalDateTime.now());
+
+        borrowerRepository.save(borrower);
+
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
+
+        return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower override updated successfully", "Borrower override updated successfully");
+    }
+
+    @Override
+    @Transactional
+    public ApiResponse<String> clearBorrowerOverride(Long adminId, Long borrowerId) {
+        adminAccountRepository.findById(adminId)
+                .orElseThrow(() -> new RuntimeException("Admin not found"));
+
+        Borrower borrower = borrowerRepository.findById(borrowerId)
+                .orElseThrow(() -> new RuntimeException("Borrower not found"));
+
+        borrower.setOverrideMaxActiveLoans(null);
+        borrower.setOverrideMaxEligibleLoanAmount(null);
+        borrower.setOverrideEligibilityTier(null);
+        borrower.setOverrideEligibilityStatus(null);
+        borrower.setOverrideReason(null);
+        borrower.setOverrideUpdatedByAdminId(null);
+        borrower.setOverrideUpdatedAt(null);
+
+        borrowerRepository.save(borrower);
+
+        borrowerAnalyticsService.refreshBorrowerDerivedFields(borrowerId);
+
+        return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower override cleared successfully", "Borrower override cleared successfully");
+    }
+
     private String safeReason(AdminActionRequestDto requestDto) {
         if (requestDto == null || requestDto.getReason() == null || requestDto.getReason().trim().isEmpty()) {
             return "No reason provided";
         }
         return requestDto.getReason().trim();
+    }
+
+    private String safeText(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

@@ -11,92 +11,140 @@ import java.util.List;
 
 @Service
 public class RiskAnalysisServiceImpl implements RiskAnalysisService {
+
     @Override
     public RiskAnalysisResultDto analyze(Borrower borrower, List<Loan> loans, List<Repayment> repayments) {
 
-        int totalMissedDays=loans.stream()
-                .map(Loan::getMissedDaysCount)
-                .filter(v -> v != null)
-                .mapToInt(Integer::intValue)
-                .sum();
+        int totalMissedDays = safeInt(borrower.getTotalMissedDays());
+        int totalLatePayments = safeInt(borrower.getTotalLatePayments());
+        int totalPartialPayments = safeInt(borrower.getTotalPartialDays());
+        int totalAdvancePayments = safeInt(borrower.getTotalAdvanceDays());
+        int maxConsecutiveMissedDays = safeInt(borrower.getMaxConsecutiveMissedDays());
+        int defaultedLoanCount = safeInt(borrower.getDefaultedLoanCount());
+        int activeLoanCount = safeInt(borrower.getActiveLoanCount());
 
-        int totalPartialPayments = (int) repayments.stream()
-                .filter(r -> Boolean.TRUE.equals(r.getIsPartialPayment()))
-                .count();
+        int closedSuccessfully = safeInt(borrower.getLoansClosedSuccessfully());
+        int closedEarly = safeInt(borrower.getLoansClosedEarly());
 
-        int totalAdvancePayments = (int) repayments.stream()
-                .filter(r -> Boolean.TRUE.equals(r.getIsAdvancePayment()))
-                .count();
+        boolean fraudFlag = Boolean.TRUE.equals(borrower.getFraudFlag());
+        boolean blacklisted = Boolean.TRUE.equals(borrower.getBlacklisted());
+        boolean kycVerified = Boolean.TRUE.equals(borrower.getKycVerified());
+        boolean incomeProofUploaded = Boolean.TRUE.equals(borrower.getIncomeProofUploaded());
 
-        int totalLatePayments = (int) repayments.stream()
-                .filter(r -> Boolean.TRUE.equals(r.getIsLatePayment()))
-                .count();
+        int riskScore = 0;
 
-        int totalPreClosures = (int) repayments.stream()
-                .filter(r -> Boolean.TRUE.equals(r.getIsPreClosure()))
-                .count();
+        // Negative repayment behaviour increases risk
+        riskScore += Math.min(30, totalMissedDays * 2);
+        riskScore += Math.min(15, totalLatePayments * 2);
+        riskScore += Math.min(12, totalPartialPayments);
+        riskScore += Math.min(20, maxConsecutiveMissedDays * 3);
+        riskScore += Math.min(30, defaultedLoanCount * 15);
+        riskScore += Math.min(12, activeLoanCount * 4);
 
-        int activeLoans = (int) loans.stream()
-                .filter(loan -> !Boolean.TRUE.equals(loan.getIsClosed()))
-                .count();
-
-        double currentOutstanding = loans.stream()
-                .filter(loan -> !Boolean.TRUE.equals(loan.getIsClosed()))
-                .map(Loan::getRemainingAmount)
-                .filter(v -> v != null)
-                .mapToDouble(Double::doubleValue)
-                .sum();
-
-        int maxConsecutiveMissedDays = repayments.stream()
-                .map(Repayment::getMissedDays)
-                .filter(v -> v != null)
-                .mapToInt(Integer::intValue)
-                .max()
-                .orElse(0);
-
-        int risk=0;
-
-        risk += totalMissedDays*2;
-        risk += totalPartialPayments;
-        risk += totalLatePayments * 2;
-        risk += activeLoans * 5;
-
-        if (currentOutstanding >= 200000) risk += 15;
-        else if (currentOutstanding >= 100000) risk += 10;
-        else if (currentOutstanding > 0) risk += 5;
-
-        if (maxConsecutiveMissedDays >= 10) risk += 20;
-        if (Boolean.TRUE.equals(borrower.getManualReviewFlag())) risk += 15;
-        if (Boolean.TRUE.equals(borrower.getBlacklisted())) risk += 30;
-        if (Boolean.TRUE.equals(borrower.getFraudFlag())) risk += 40;
-
-        risk -= totalAdvancePayments;
-        risk -= totalPreClosures * 4;
-
-        if (risk < 0) risk = 0;
-        if (risk > 100) risk = 100;
-
-        String category;
-        String recommendation;
-
-        if (risk <= 20) {
-            category = "LOW";
-            recommendation = "Borrower shows relatively stable behavior";
-        } else if (risk <= 40) {
-            category = "MEDIUM";
-            recommendation = "Borrower needs controlled exposure";
-        } else if (risk <= 70) {
-            category = "HIGH";
-            recommendation = "Lend only with stronger restrictions or collateral";
-        } else {
-            category = "VERY_HIGH";
-            recommendation = "Reject or require strict manual review";
+        // Serious flags sharply increase risk
+        if (fraudFlag) {
+            riskScore += 35;
         }
 
+        if (blacklisted) {
+            riskScore += 45;
+        }
+
+        // Good behaviour reduces risk
+        riskScore -= Math.min(10, totalAdvancePayments);
+        riskScore -= Math.min(10, closedSuccessfully);
+        riskScore -= Math.min(8, closedEarly * 2);
+
+        if (kycVerified) {
+            riskScore -= 5;
+        }
+
+        if (incomeProofUploaded) {
+            riskScore -= 5;
+        }
+
+        if (riskScore < 0) {
+            riskScore = 0;
+        }
+
+        if (riskScore > 100) {
+            riskScore = 100;
+        }
+
+        String riskCategory;
+        if (riskScore <= 24) {
+            riskCategory = "LOW";
+        } else if (riskScore <= 59) {
+            riskCategory = "MEDIUM";
+        } else {
+            riskCategory = "HIGH";
+        }
+
+        String reason = buildReason(
+                riskCategory,
+                totalMissedDays,
+                totalLatePayments,
+                totalPartialPayments,
+                maxConsecutiveMissedDays,
+                defaultedLoanCount,
+                fraudFlag,
+                blacklisted,
+                totalAdvancePayments,
+                closedSuccessfully,
+                closedEarly
+        );
+
         RiskAnalysisResultDto dto = new RiskAnalysisResultDto();
-        dto.setRiskScore(risk);
-        dto.setRiskCategory(category);
-        dto.setRecommendation(recommendation);
+        dto.setRiskScore(riskScore);
+        dto.setRiskCategory(riskCategory);
         return dto;
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private String buildReason(
+            String riskCategory,
+            int totalMissedDays,
+            int totalLatePayments,
+            int totalPartialPayments,
+            int maxConsecutiveMissedDays,
+            int defaultedLoanCount,
+            boolean fraudFlag,
+            boolean blacklisted,
+            int totalAdvancePayments,
+            int closedSuccessfully,
+            int closedEarly
+    ) {
+        if (blacklisted) {
+            return "Borrower is blacklisted, so risk is automatically high.";
+        }
+
+        if (fraudFlag) {
+            return "Fraud flag is present, so borrower requires strict caution.";
+        }
+
+        if ("HIGH".equals(riskCategory)) {
+            if (defaultedLoanCount > 0) {
+                return "High risk due to previous defaults and weak repayment behaviour.";
+            }
+            if (maxConsecutiveMissedDays >= 5 || totalMissedDays >= 10) {
+                return "High risk due to repeated missed repayments.";
+            }
+            return "High risk due to weak repayment consistency.";
+        }
+
+        if ("MEDIUM".equals(riskCategory)) {
+            if (totalLatePayments > 0 || totalPartialPayments > 0) {
+                return "Medium risk because borrower has mixed repayment behaviour.";
+            }
+            return "Medium risk due to moderate repayment uncertainty.";
+        }
+
+        if (closedSuccessfully > 0 || closedEarly > 0 || totalAdvancePayments > 0) {
+            return "Low risk because borrower has shown good repayment behaviour.";
+        }
+        return "Low risk based on current borrower profile and repayment record.";
     }
 }

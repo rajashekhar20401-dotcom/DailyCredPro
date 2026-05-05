@@ -211,6 +211,27 @@ public class Borrower {
     @Column(name = "terms_version", length = 50)
     private String termsVersion;
 
+    @Column(name = "override_max_active_loans")
+    private Integer overrideMaxActiveLoans;
+
+    @Column(name = "override_max_eligible_loan_amount", precision = 19, scale = 2)
+    private java.math.BigDecimal overrideMaxEligibleLoanAmount;
+
+    @Column(name = "override_eligibility_tier", length = 50)
+    private String overrideEligibilityTier;
+
+    @Column(name = "override_eligibility_status", length = 50)
+    private String overrideEligibilityStatus;
+
+    @Column(name = "override_reason", length = 500)
+    private String overrideReason;
+
+    @Column(name = "override_updated_by_admin_id")
+    private Long overrideUpdatedByAdminId;
+
+    @Column(name = "override_updated_at")
+    private java.time.LocalDateTime overrideUpdatedAt;
+
     @OneToMany(mappedBy = "borrower", cascade = CascadeType.ALL, orphanRemoval = false)
     private List<LoanApplication> loanApplications = new ArrayList<>();
 }

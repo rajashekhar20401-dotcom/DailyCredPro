@@ -97,6 +97,9 @@ public class LoanServiceImpl implements LoanService {
         BigDecimal totalRepayableAmount = sanctionedAmount;
         BigDecimal dailyDue = loanCalculationService.calculateDailyDue(totalRepayableAmount, tenureDays);
 
+        BigDecimal dailyInterestAmount = tenureDays <= 0
+                ? BigDecimal.ZERO
+                : upfrontInterest.divide(BigDecimal.valueOf(tenureDays), 2, java.math.RoundingMode.HALF_UP);
         Loan loan = new Loan();
         loan.setLoanApplicationId(application.getApplicationId());
         loan.setBorrowerId(borrowerId);
@@ -117,6 +120,9 @@ public class LoanServiceImpl implements LoanService {
         loan.setDisbursedAmount(disbursedAmount);
         loan.setInterestDeductionAmount(upfrontInterest);
         loan.setInterestDeductionPercent(interestPercent);
+        loan.setDailyInterestAmount(dailyInterestAmount);
+        loan.setTotalInterestRebateAmount(BigDecimal.ZERO);
+
         loan.setTotalRepayableAmount(totalRepayableAmount);
         loan.setPrincipalOutstanding(totalRepayableAmount);
         loan.setOverdueAmount(BigDecimal.ZERO);
@@ -260,6 +266,17 @@ public class LoanServiceImpl implements LoanService {
         dto.setPlatformFeeRate(loan.getPlatformFeeRate() == null ? null : loan.getPlatformFeeRate().doubleValue());
         dto.setPlatformFeeAmount(loan.getPlatformFeeAmount() == null ? null : loan.getPlatformFeeAmount().doubleValue());
         dto.setPlatformFeeCharged(loan.getPlatformFeeCharged());
+
+        dto.setDailyInterestAmount(loan.getDailyInterestAmount() == null ? null : loan.getDailyInterestAmount().doubleValue());
+        dto.setTotalInterestRebateAmount(loan.getTotalInterestRebateAmount() == null ? null : loan.getTotalInterestRebateAmount().doubleValue());
+
+        java.math.BigDecimal effectiveTotalRepayable = loan.getTotalRepayableAmount() == null
+                ? java.math.BigDecimal.ZERO
+                : loan.getTotalRepayableAmount().subtract(
+                loan.getTotalInterestRebateAmount() == null ? java.math.BigDecimal.ZERO : loan.getTotalInterestRebateAmount()
+        );
+
+        dto.setEffectiveTotalRepayableAmount(effectiveTotalRepayable.doubleValue());
 
         return dto;
     }

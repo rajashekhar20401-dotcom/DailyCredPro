@@ -1,4 +1,5 @@
-package com.unqiuehire.kashflow.serviceImpl;
+package com.unqiuehire.kashflow.serviceimpl;
+
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.LoanPlanStatus;
 import com.unqiuehire.kashflow.dto.requestdto.LoanPlanRequest;
@@ -24,7 +25,6 @@ public class LoanPlanServiceImpl implements LoanPlanService {
     @Autowired
     private LenderRepository lenderRepository;
 
-    // ✅ CREATE
     @Override
     public ApiResponse<LoanPlanResponseDto> createLoanPlan(Long lenderId, LoanPlanRequest request) {
 
@@ -39,7 +39,11 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         loanPlan.setPlanName(request.getPlanName());
         loanPlan.setAmount(request.getAmount());
         loanPlan.setInterestPerDay(request.getInterestPerDay());
-        loanPlan.setPenaltyAmount(request.getPenaltyAmount());
+
+        // Penalty is no longer lender-entered plan data.
+        // Real penalty is generated later from repayment behaviour.
+        loanPlan.setPenaltyAmount(0.0);
+
         loanPlan.setPlanDuration(request.getPlanDuration());
         loanPlan.setMinCibil(request.getMinCibil());
         loanPlan.setMinAge(request.getMinAge());
@@ -56,7 +60,6 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan Plan Created", mapToResponse(saved));
     }
 
-    // ✅ GET BY LENDER ID
     @Override
     public ApiResponse<List<LoanPlanResponseDto>> getLoanPlansByLenderId(Long lenderId) {
 
@@ -79,7 +82,6 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan Plans fetched", responseList);
     }
 
-    // ✅ UPDATE BY LENDER ID
     @Override
     public ApiResponse<LoanPlanResponseDto> updateLoanPlanByLenderId(Long lenderId, Long planId, LoanPlanRequest request) {
 
@@ -95,16 +97,18 @@ public class LoanPlanServiceImpl implements LoanPlanService {
             return new ApiResponse<>(ApiStatus.FAILURE, "Loan Plan not found", null);
         }
 
-        // 🔥 Ensure plan belongs to lender
         if (!loanPlan.getLender().getLenderId().equals(lenderId)) {
             return new ApiResponse<>(ApiStatus.FAILURE, "Unauthorized: Plan not belongs to lender", null);
         }
 
-        // update fields
         loanPlan.setPlanName(request.getPlanName());
         loanPlan.setAmount(request.getAmount());
         loanPlan.setInterestPerDay(request.getInterestPerDay());
-        loanPlan.setPenaltyAmount(request.getPenaltyAmount());
+
+        // Penalty is no longer lender-entered plan data.
+        // Real penalty is generated later from repayment behaviour.
+        loanPlan.setPenaltyAmount(0.0);
+
         loanPlan.setPlanDuration(request.getPlanDuration());
         loanPlan.setMinCibil(request.getMinCibil());
         loanPlan.setMinAge(request.getMinAge());
@@ -120,7 +124,6 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan Plan Updated", mapToResponse(updated));
     }
 
-    // ✅ MAPPER
     private LoanPlanResponseDto mapToResponse(LoanPlan loanPlan) {
 
         LoanPlanResponseDto response = new LoanPlanResponseDto();

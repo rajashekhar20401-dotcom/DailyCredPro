@@ -56,6 +56,23 @@ function getCashCollectionTone(status) {
   return "slate";
 }
 
+function normalizeApiData(response) {
+  const body = response?.data;
+
+  if (
+    body &&
+    typeof body === "object" &&
+    !Array.isArray(body) &&
+    Object.prototype.hasOwnProperty.call(body, "data") &&
+    (Object.prototype.hasOwnProperty.call(body, "status") ||
+      Object.prototype.hasOwnProperty.call(body, "message"))
+  ) {
+    return body.data;
+  }
+
+  return body;
+}
+
 export default function LenderRepaymentTrackingPage() {
   const { userId } = useAuth();
 
@@ -63,6 +80,8 @@ export default function LenderRepaymentTrackingPage() {
   const [borrowerMap, setBorrowerMap] = useState({});
   const [repaymentsMap, setRepaymentsMap] = useState({});
   const [cashRequests, setCashRequests] = useState([]);
+  const [penaltyEvents, setPenaltyEvents] = useState([]);
+  const [rewardEvents, setRewardEvents] = useState([]);
   const [selectedLoanId, setSelectedLoanId] = useState(null);
 
   const [profileBorrowerId, setProfileBorrowerId] = useState(null);
@@ -74,7 +93,6 @@ export default function LenderRepaymentTrackingPage() {
 
   const [cashForm, setCashForm] = useState({
     amount: "",
-    paymentDate: "",
     lenderNote: "",
   });
 
@@ -108,6 +126,10 @@ export default function LenderRepaymentTrackingPage() {
   const totalPlatformFee = useMemo(() => {
     return loans.reduce((sum, loan) => sum + Number(loan.platformFeeAmount || 0), 0).toFixed(2);
   }, [loans]);
+
+  const totalRewards = useMemo(() => {
+    return rewardEvents.reduce((sum, event) => sum + Number(event.rewardAmount || 0), 0).toFixed(2);
+  }, [rewardEvents]);
 
   const activeLoansCount = useMemo(() => {
     return loans.filter((loan) => loan.isClosed !== true).length;
@@ -176,9 +198,11 @@ export default function LenderRepaymentTrackingPage() {
         api.get(`/api/cash-collections/lender/${userId}`),
       ]);
 
-      const lenderLoans = loansResponse.data?.data || [];
+      const lenderLoans = normalizeApiData(loansResponse) || [];
+      const cashItems = normalizeApiData(cashResponse) || [];
+
       setLoans(lenderLoans);
-      setCashRequests(cashResponse.data?.data || []);
+      setCashRequests(cashItems);
 
       const borrowerIds = [...new Set(lenderLoans.map((loan) => loan.borrowerId).filter(Boolean))];
 
@@ -186,7 +210,7 @@ export default function LenderRepaymentTrackingPage() {
         borrowerIds.map(async (borrowerId) => {
           try {
             const response = await api.get(`/api/borrowers/${borrowerId}`);
-            return [borrowerId, response.data?.data || null];
+            return [borrowerId, normalizeApiData(response) || null];
           } catch {
             return [borrowerId, null];
           }
@@ -199,7 +223,7 @@ export default function LenderRepaymentTrackingPage() {
         lenderLoans.map(async (loan) => {
           try {
             const response = await api.get(`/api/repayments/loan/${loan.loanId}`);
-            return [loan.loanId, response.data || []];
+            return [loan.loanId, normalizeApiData(response) || response.data || []];
           } catch {
             return [loan.loanId, []];
           }
@@ -223,6 +247,27 @@ export default function LenderRepaymentTrackingPage() {
     }
   }
 
+  async function loadEventLedgers(loanId) {
+    if (!loanId) {
+      setPenaltyEvents([]);
+      setRewardEvents([]);
+      return;
+    }
+
+    try {
+      const [penaltyResponse, rewardResponse] = await Promise.all([
+        api.get(`/api/penalty-events/loan/${loanId}`),
+        api.get(`/api/reward-events/loan/${loanId}`),
+      ]);
+
+      setPenaltyEvents(normalizeApiData(penaltyResponse) || penaltyResponse.data || []);
+      setRewardEvents(normalizeApiData(rewardResponse) || rewardResponse.data || []);
+    } catch {
+      setPenaltyEvents([]);
+      setRewardEvents([]);
+    }
+  }
+
   async function openBorrowerProfile(borrowerId) {
     if (!borrowerId) return;
 
@@ -241,14 +286,14 @@ export default function LenderRepaymentTrackingPage() {
         api.get(`/api/borrower-analytics/${borrowerId}/summary`),
       ]);
 
-      setSelectedBorrowerProfile(profileResponse.data?.data || null);
-      setSelectedBorrowerAnalytics(analyticsResponse.data?.data || null);
+      setSelectedBorrowerProfile(normalizeApiData(profileResponse) || null);
+      setSelectedBorrowerAnalytics(normalizeApiData(analyticsResponse) || null);
 
       try {
         const locationResponse = await api.get(
           `/api/location/lenders/${userId}/borrowers/${borrowerId}/last-known-location`
         );
-        setSelectedBorrowerLastKnownLocation(locationResponse.data?.data || null);
+        setSelectedBorrowerLastKnownLocation(normalizeApiData(locationResponse) || null);
       } catch (locationErr) {
         setSelectedBorrowerLastKnownLocation(null);
         setLastKnownLocationMessage(
@@ -280,19 +325,18 @@ export default function LenderRepaymentTrackingPage() {
       const payload = {
         loanId: selectedLoan.loanId,
         amount: cashForm.amount === "" ? null : Number(cashForm.amount),
-        paymentDate: cashForm.paymentDate || null,
+        paymentDate: null,
         lenderNote: cashForm.lenderNote || null,
       };
 
       const response = await api.post(`/api/cash-collections/lender/${userId}/initiate`, payload);
-      const confirmation = response.data?.data;
+      const confirmation = normalizeApiData(response);
 
       setMessage(response.data?.message || "Cash collection initiated successfully.");
       setLatestGeneratedToken(confirmation?.generatedToken || "");
 
       setCashForm({
         amount: selectedLoan.dailyEmi ? String(selectedLoan.dailyEmi) : "",
-        paymentDate: "",
         lenderNote: "",
       });
 
@@ -312,9 +356,12 @@ export default function LenderRepaymentTrackingPage() {
     if (selectedLoan) {
       setCashForm({
         amount: selectedLoan.dailyEmi ? String(selectedLoan.dailyEmi) : "",
-        paymentDate: "",
         lenderNote: "",
       });
+      loadEventLedgers(selectedLoan.loanId);
+    } else {
+      setPenaltyEvents([]);
+      setRewardEvents([]);
     }
   }, [selectedLoan]);
 
@@ -331,17 +378,18 @@ export default function LenderRepaymentTrackingPage() {
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Lender Repayment Tracking</h2>
         <p className="mt-2 text-sm text-slate-500">
-          Track active loans, collections, borrower repayment behavior, overdue amounts, and cash confirmations.
+          Track active loans, collections, borrower repayment behavior, overdue amounts, penalty reasons, and early repayment rewards.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3 xl:grid-cols-7">
         <SummaryCard title="Total Loans" value={loans.length} subtitle="All lender-side loans" />
         <SummaryCard title="Active Loans" value={activeLoansCount} subtitle="Still open" />
         <SummaryCard title="Total Collected" value={totalCollected} subtitle="All repayments received" />
         <SummaryCard title="Outstanding" value={totalOutstanding} subtitle="Remaining loan balance" />
         <SummaryCard title="Overdue" value={totalOverdue} subtitle="Current overdue exposure" />
         <SummaryCard title="Today Collection" value={todayCollection} subtitle={`${todayPaidCount} repayments today`} />
+        <SummaryCard title="Rewards Tracked" value={totalRewards} subtitle="Early repayment rewards" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -583,7 +631,7 @@ export default function LenderRepaymentTrackingPage() {
           <div className="rounded-2xl bg-white p-6 shadow-sm">
             <h3 className="mb-4 text-lg font-semibold text-slate-900">Selected Loan Detail</h3>
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
               <SummaryCard
                 title="Borrower"
                 value={borrowerMap[selectedLoan.borrowerId]?.borrowerName || selectedLoan.borrowerId}
@@ -614,6 +662,16 @@ export default function LenderRepaymentTrackingPage() {
                 value={selectedLoan.platformFeeAmount ?? 0}
                 subtitle="Accrued platform fee for this loan"
               />
+              <SummaryCard
+                title="Penalty Events"
+                value={penaltyEvents.length}
+                subtitle="Reason ledger count"
+              />
+              <SummaryCard
+                title="Reward Events"
+                value={rewardEvents.length}
+                subtitle="Early repayment reward records"
+              />
             </div>
           </div>
 
@@ -637,12 +695,14 @@ export default function LenderRepaymentTrackingPage() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Payment Date</label>
                 <input
-                  type="date"
-                  name="paymentDate"
-                  value={cashForm.paymentDate}
-                  onChange={(e) => setCashForm((prev) => ({ ...prev, paymentDate: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                  type="text"
+                  value={new Date().toISOString().slice(0, 10)}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-slate-600"
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  Cash collection requests are always created for today to avoid future-date penalty confusion.
+                </p>
               </div>
 
               <div className="md:col-span-2">
@@ -709,6 +769,7 @@ export default function LenderRepaymentTrackingPage() {
                     <th className="px-3 py-3">Mode</th>
                     <th className="px-3 py-3">Status</th>
                     <th className="px-3 py-3">Penalty</th>
+                    <th className="px-3 py-3">Interest Rebate</th>
                     <th className="px-3 py-3">Missed Days</th>
                     <th className="px-3 py-3">Balance</th>
                     <th className="px-3 py-3">Reference</th>
@@ -717,7 +778,7 @@ export default function LenderRepaymentTrackingPage() {
                 <tbody>
                   {selectedLoanRepayments.length === 0 ? (
                     <tr>
-                      <td colSpan="9" className="px-3 py-6 text-center text-slate-500">
+                      <td colSpan="10" className="px-3 py-6 text-center text-slate-500">
                         No repayments recorded for this loan yet.
                       </td>
                     </tr>
@@ -732,9 +793,99 @@ export default function LenderRepaymentTrackingPage() {
                           <StatusPill text={item.paymentStatus || "UNKNOWN"} tone={getRepaymentTone(item.paymentStatus)} />
                         </td>
                         <td className="px-3 py-3 text-slate-700">{item.penaltyAmount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.interestRebateApplied ?? 0}</td>
                         <td className="px-3 py-3 text-slate-700">{item.missedDays ?? 0}</td>
                         <td className="px-3 py-3 text-slate-700">{item.balanceAmount ?? "-"}</td>
                         <td className="px-3 py-3 text-slate-700">{item.transactionReference || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Penalty Explanation Ledger</h3>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    <th className="px-3 py-3">Date</th>
+                    <th className="px-3 py-3">Reason</th>
+                    <th className="px-3 py-3">Amount</th>
+                    <th className="px-3 py-3">Trigger Count</th>
+                    <th className="px-3 py-3">Threshold</th>
+                    <th className="px-3 py-3">Daily Interest</th>
+                    <th className="px-3 py-3">Penalty %</th>
+                    <th className="px-3 py-3">Explanation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {penaltyEvents.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-3 py-6 text-center text-slate-500">
+                        No penalty explanation records found for this loan.
+                      </td>
+                    </tr>
+                  ) : (
+                    penaltyEvents.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-100">
+                        <td className="px-3 py-3 text-slate-700">{formatDate(item.eventDate)}</td>
+                        <td className="px-3 py-3 text-slate-700">
+                          <StatusPill
+                            text={item.reasonType || "UNKNOWN"}
+                            tone={item.reasonType === "MISSED_STREAK_PENALTY" ? "red" : "yellow"}
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-slate-700">{item.amount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.triggerCount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.thresholdValue ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.dailyInterestAmount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.penaltyPercent ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.note || "-"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-2xl bg-white p-6 shadow-sm">
+            <h3 className="mb-4 text-lg font-semibold text-slate-900">Reward Ledger</h3>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    <th className="px-3 py-3">Date</th>
+                    <th className="px-3 py-3">Reward Type</th>
+                    <th className="px-3 py-3">Reward %</th>
+                    <th className="px-3 py-3">Base Amount</th>
+                    <th className="px-3 py-3">Reward Amount</th>
+                    <th className="px-3 py-3">Explanation</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rewardEvents.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="px-3 py-6 text-center text-slate-500">
+                        No reward records found for this loan yet.
+                      </td>
+                    </tr>
+                  ) : (
+                    rewardEvents.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-100">
+                        <td className="px-3 py-3 text-slate-700">{formatDate(item.eventDate)}</td>
+                        <td className="px-3 py-3 text-slate-700">
+                          <StatusPill text={item.reasonType || "UNKNOWN"} tone="blue" />
+                        </td>
+                        <td className="px-3 py-3 text-slate-700">{item.rewardPercent ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.baseAmount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.rewardAmount ?? 0}</td>
+                        <td className="px-3 py-3 text-slate-700">{item.note || "-"}</td>
                       </tr>
                     ))
                   )}

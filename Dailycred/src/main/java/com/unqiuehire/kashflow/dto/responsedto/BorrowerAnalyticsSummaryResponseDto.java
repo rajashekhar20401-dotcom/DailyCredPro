@@ -1,6 +1,7 @@
 package com.unqiuehire.kashflow.dto.responsedto;
 
-import lombok.*;
+import lombok.Getter;
+import lombok.Setter;
 
 @Getter
 @Setter
@@ -19,6 +20,9 @@ public class BorrowerAnalyticsSummaryResponseDto {
     private Double maxEligibleLoanAmount;
     private Boolean collateralRequired;
     private String recommendation;
+
+    private Integer allowedActiveLoanLimit;
+    private Integer remainingActiveLoanSlots;
 
     private Integer totalLoansTaken;
     private Integer activeLoans;

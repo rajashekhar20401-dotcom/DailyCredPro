@@ -71,6 +71,12 @@ public class Loan {
     @Column(precision = 5, scale = 2)
     private BigDecimal interestDeductionPercent;
 
+    @Column(precision = 19, scale = 2)
+    private BigDecimal dailyInterestAmount = BigDecimal.ZERO;
+
+    @Column(precision = 19, scale = 2)
+    private BigDecimal totalInterestRebateAmount = BigDecimal.ZERO;
+
     private Boolean isCustomLoan;
 
     @Column(precision = 5, scale = 2)

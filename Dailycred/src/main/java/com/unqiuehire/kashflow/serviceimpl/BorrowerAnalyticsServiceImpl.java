@@ -1,10 +1,15 @@
 package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
-import com.unqiuehire.kashflow.dto.responsedto.*;
+import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
+import com.unqiuehire.kashflow.dto.responsedto.BorrowerAnalyticsSummaryResponseDto;
+import com.unqiuehire.kashflow.dto.responsedto.EligibilityResultDto;
+import com.unqiuehire.kashflow.dto.responsedto.RiskAnalysisResultDto;
+import com.unqiuehire.kashflow.entity.AdminAccount;
 import com.unqiuehire.kashflow.entity.Borrower;
 import com.unqiuehire.kashflow.entity.Loan;
 import com.unqiuehire.kashflow.entity.Repayment;
+import com.unqiuehire.kashflow.repository.AdminAccountRepository;
 import com.unqiuehire.kashflow.repository.BorrowerRepository;
 import com.unqiuehire.kashflow.repository.LoanRepository;
 import com.unqiuehire.kashflow.repository.RepaymentRepository;
@@ -16,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -23,9 +29,12 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class BorrowerAnalyticsServiceImpl implements BorrowerAnalyticsService {
 
+    private static final int DEFAULT_MAX_ACTIVE_LOANS = 3;
+
     private final BorrowerRepository borrowerRepository;
     private final LoanRepository loanRepository;
     private final RepaymentRepository repaymentRepository;
+    private final AdminAccountRepository adminAccountRepository;
     private final InternalCreditScoreService internalCreditScoreService;
     private final RiskAnalysisService riskAnalysisService;
     private final EligibilityService eligibilityService;
@@ -38,15 +47,35 @@ public class BorrowerAnalyticsServiceImpl implements BorrowerAnalyticsService {
             return new ApiResponse<>(ApiStatus.FAILURE, "Borrower not found", null);
         }
 
-        Borrower borrower = optionalBorrower.get();
+        BorrowerAnalyticsSummaryResponseDto dto = refreshBorrowerDerivedFields(borrowerId);
+
+        return new ApiResponse<>(
+                ApiStatus.SUCCESS,
+                "Borrower analytics summary generated successfully",
+                dto
+        );
+    }
+
+    @Override
+    public BorrowerAnalyticsSummaryResponseDto refreshBorrowerDerivedFields(Long borrowerId) {
+        Borrower borrower = borrowerRepository.findById(borrowerId)
+                .orElseThrow(() -> new RuntimeException("Borrower not found"));
+
         List<Loan> loans = loanRepository.findByBorrowerId(borrowerId);
         List<Repayment> repayments = repaymentRepository.findByBorrowerIdOrderByPaymentDateDesc(borrowerId);
 
         int totalLoansTaken = loans.size();
-        int activeLoans = (int) loans.stream().filter(loan -> !Boolean.TRUE.equals(loan.getIsClosed())).count();
-        int closedLoans = (int) loans.stream().filter(loan -> Boolean.TRUE.equals(loan.getIsClosed())).count();
+
+        int activeLoans = (int) loans.stream()
+                .filter(loan -> !Boolean.TRUE.equals(loan.getIsClosed()))
+                .count();
+
+        int closedLoans = (int) loans.stream()
+                .filter(loan -> Boolean.TRUE.equals(loan.getIsClosed()))
+                .count();
+
         int defaultedLoanCount = (int) loans.stream()
-                .filter(loan -> loan.getMissedDaysCount() != null && loan.getMissedDaysCount() >= 10)
+                .filter(loan -> safeInt(loan.getMissedDaysCount()) >= 10)
                 .count();
 
         int totalRepaymentEvents = repayments.size();
@@ -73,14 +102,16 @@ public class BorrowerAnalyticsServiceImpl implements BorrowerAnalyticsService {
                 .filter(r -> Boolean.TRUE.equals(r.getIsPreClosure()))
                 .count();
 
-        int maxConsecutiveMissedDays = repayments.stream()
-                .map(Repayment::getMissedDays)
+        int maxConsecutiveMissedDays = loans.stream()
+                .map(Loan::getConsecutiveMissedDays)
                 .filter(v -> v != null)
                 .mapToInt(Integer::intValue)
                 .max()
                 .orElse(0);
 
-        double averageMissedDaysPerLoan = totalLoansTaken == 0 ? 0.0 : (double) totalMissedDays / totalLoansTaken;
+        double averageMissedDaysPerLoan = totalLoansTaken == 0
+                ? 0.0
+                : (double) totalMissedDays / totalLoansTaken;
 
         double totalDisbursedAmount = loans.stream()
                 .map(Loan::getDisbursedAmount)
@@ -105,57 +136,248 @@ public class BorrowerAnalyticsServiceImpl implements BorrowerAnalyticsService {
         RiskAnalysisResultDto riskResult = riskAnalysisService.analyze(borrower, loans, repayments);
         EligibilityResultDto eligibilityResult = eligibilityService.evaluate(borrower, internalCreditScore, riskResult, loans);
 
-        // sync derived values back into borrower
+        syncDerivedValuesToBorrower(
+                borrower,
+                totalLoansTaken,
+                activeLoans,
+                closedLoans,
+                defaultedLoanCount,
+                totalMissedDays,
+                totalPartialPayments,
+                totalAdvancePayments,
+                totalLatePayments,
+                maxConsecutiveMissedDays,
+                currentOutstandingAmount,
+                internalCreditScore,
+                riskResult,
+                eligibilityResult,
+                loans
+        );
+
+        Borrower savedBorrower = borrowerRepository.save(borrower);
+
+        return buildSummaryDto(
+                savedBorrower,
+                totalRepaymentEvents,
+                totalPreClosures,
+                averageMissedDaysPerLoan,
+                totalDisbursedAmount,
+                totalRepaidAmount
+        );
+    }
+
+    private void syncDerivedValuesToBorrower(
+            Borrower borrower,
+            int totalLoansTaken,
+            int activeLoans,
+            int closedLoans,
+            int defaultedLoanCount,
+            int totalMissedDays,
+            int totalPartialPayments,
+            int totalAdvancePayments,
+            int totalLatePayments,
+            int maxConsecutiveMissedDays,
+            double currentOutstandingAmount,
+            int internalCreditScore,
+            RiskAnalysisResultDto riskResult,
+            EligibilityResultDto eligibilityResult,
+            List<Loan> loans
+    ) {
         borrower.setTotalLoansTaken(totalLoansTaken);
         borrower.setActiveLoanCount(activeLoans);
-        borrower.setCurrentOutstandingAmount(BigDecimal.valueOf(currentOutstandingAmount));
+        borrower.setCurrentOutstandingAmount(BigDecimal.valueOf(round2(currentOutstandingAmount)));
         borrower.setDefaultedLoanCount(defaultedLoanCount);
         borrower.setLoansClosedSuccessfully(closedLoans);
-        borrower.setLoansClosedEarly((int) loans.stream().filter(loan -> Boolean.TRUE.equals(loan.getClosedEarly())).count());
+        borrower.setLoansClosedEarly(
+                (int) loans.stream().filter(loan -> Boolean.TRUE.equals(loan.getClosedEarly())).count()
+        );
         borrower.setTotalMissedDays(totalMissedDays);
         borrower.setTotalPartialDays(totalPartialPayments);
         borrower.setTotalAdvanceDays(totalAdvancePayments);
         borrower.setTotalLatePayments(totalLatePayments);
         borrower.setMaxConsecutiveMissedDays(maxConsecutiveMissedDays);
+
         borrower.setInternalCreditScore(internalCreditScore);
-        borrower.setRiskScore(riskResult.getRiskScore());
-        borrower.setRiskCategory(riskResult.getRiskCategory());
-        borrower.setEligibilityTier(eligibilityResult.getEligibilityTier());
-        borrower.setEligibilityStatus(eligibilityResult.getEligibilityStatus());
-        borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(eligibilityResult.getMaxEligibleLoanAmount()));
-        borrower.setEligibilityScore(Math.max(0, internalCreditScore - riskResult.getRiskScore()));
+        borrower.setCibil(internalCreditScore); // compatibility mirror only
 
-        borrowerRepository.save(borrower);
+        borrower.setRiskScore(riskResult == null ? 0 : safeInt(riskResult.getRiskScore()));
+        borrower.setRiskCategory(riskResult == null || isBlank(riskResult.getRiskCategory())
+                ? "UNKNOWN"
+                : riskResult.getRiskCategory().trim().toUpperCase());
 
+        borrower.setEligibilityTier(eligibilityResult == null || isBlank(eligibilityResult.getEligibilityTier())
+                ? "UNASSIGNED"
+                : eligibilityResult.getEligibilityTier());
+
+        borrower.setEligibilityStatus(eligibilityResult == null || isBlank(eligibilityResult.getEligibilityStatus())
+                ? "PENDING_REVIEW"
+                : eligibilityResult.getEligibilityStatus());
+
+        double maxEligibleLoanAmount = eligibilityResult == null ? 0.0 : safeDouble(eligibilityResult.getMaxEligibleLoanAmount());
+        borrower.setMaxEligibleLoanAmount(BigDecimal.valueOf(round2(maxEligibleLoanAmount)));
+
+        borrower.setEligibilityScore(Math.max(
+                0,
+                internalCreditScore - safeInt(riskResult == null ? null : riskResult.getRiskScore())
+        ));
+    }
+
+    private BorrowerAnalyticsSummaryResponseDto buildSummaryDto(
+            Borrower borrower,
+            int totalRepaymentEvents,
+            int totalPreClosures,
+            double averageMissedDaysPerLoan,
+            double totalDisbursedAmount,
+            double totalRepaidAmount
+    ) {
         BorrowerAnalyticsSummaryResponseDto dto = new BorrowerAnalyticsSummaryResponseDto();
+
+        int activeLoans = safeInt(borrower.getActiveLoanCount());
+        int allowedActiveLoanLimit = resolveAllowedActiveLoans(borrower);
+        int remainingActiveLoanSlots = Math.max(0, allowedActiveLoanLimit - activeLoans);
+
         dto.setBorrowerId(borrower.getBorrowerId());
         dto.setBorrowerName(borrower.getBorrowerName());
-        dto.setCurrentCibil(internalCreditScore);
-        dto.setInternalCreditScore(internalCreditScore);
-        dto.setRiskScore(riskResult.getRiskScore());
-        dto.setRiskCategory(riskResult.getRiskCategory());
-        dto.setEligibilityTier(eligibilityResult.getEligibilityTier());
-        dto.setEligibilityStatus(eligibilityResult.getEligibilityStatus());
-        dto.setMaxEligibleLoanAmount(eligibilityResult.getMaxEligibleLoanAmount());
-        dto.setCollateralRequired(eligibilityResult.getCollateralRequired());
-        dto.setRecommendation(eligibilityResult.getReason());
 
-        dto.setTotalLoansTaken(totalLoansTaken);
+        dto.setCurrentCibil(safeInt(borrower.getCibil()));
+        dto.setInternalCreditScore(safeInt(borrower.getInternalCreditScore()));
+        dto.setRiskScore(safeInt(borrower.getRiskScore()));
+        dto.setRiskCategory(defaultString(borrower.getRiskCategory(), "UNKNOWN"));
+
+        dto.setEligibilityTier(defaultString(borrower.getEligibilityTier(), "UNASSIGNED"));
+        dto.setEligibilityStatus(defaultString(borrower.getEligibilityStatus(), "PENDING_REVIEW"));
+        dto.setMaxEligibleLoanAmount(safeBigDecimalToDouble(borrower.getMaxEligibleLoanAmount()));
+        dto.setCollateralRequired("COLLATERAL_REQUIRED".equalsIgnoreCase(borrower.getEligibilityStatus()));
+        dto.setRecommendation(buildRecommendation(borrower, allowedActiveLoanLimit, remainingActiveLoanSlots));
+
+        dto.setAllowedActiveLoanLimit(allowedActiveLoanLimit);
+        dto.setRemainingActiveLoanSlots(remainingActiveLoanSlots);
+
+        dto.setTotalLoansTaken(safeInt(borrower.getTotalLoansTaken()));
         dto.setActiveLoans(activeLoans);
-        dto.setClosedLoans(closedLoans);
-        dto.setDefaultedLoanCount(defaultedLoanCount);
-        dto.setTotalRepaymentEvents(totalRepaymentEvents);
-        dto.setTotalMissedDays(totalMissedDays);
-        dto.setTotalPartialPayments(totalPartialPayments);
-        dto.setTotalAdvancePayments(totalAdvancePayments);
-        dto.setTotalLatePayments(totalLatePayments);
-        dto.setTotalPreClosures(totalPreClosures);
-        dto.setMaxConsecutiveMissedDays(maxConsecutiveMissedDays);
-        dto.setAverageMissedDaysPerLoan(averageMissedDaysPerLoan);
-        dto.setTotalDisbursedAmount(totalDisbursedAmount);
-        dto.setTotalRepaidAmount(totalRepaidAmount);
-        dto.setCurrentOutstandingAmount(currentOutstandingAmount);
+        dto.setClosedLoans(safeInt(borrower.getLoansClosedSuccessfully()));
+        dto.setDefaultedLoanCount(safeInt(borrower.getDefaultedLoanCount()));
 
-        return new ApiResponse<>(ApiStatus.SUCCESS, "Borrower analytics summary generated successfully", dto);
+        dto.setTotalRepaymentEvents(totalRepaymentEvents);
+        dto.setTotalMissedDays(safeInt(borrower.getTotalMissedDays()));
+        dto.setTotalPartialPayments(safeInt(borrower.getTotalPartialDays()));
+        dto.setTotalAdvancePayments(safeInt(borrower.getTotalAdvanceDays()));
+        dto.setTotalLatePayments(safeInt(borrower.getTotalLatePayments()));
+        dto.setTotalPreClosures(totalPreClosures);
+        dto.setMaxConsecutiveMissedDays(safeInt(borrower.getMaxConsecutiveMissedDays()));
+
+        dto.setAverageMissedDaysPerLoan(round2(averageMissedDaysPerLoan));
+        dto.setTotalDisbursedAmount(round2(totalDisbursedAmount));
+        dto.setTotalRepaidAmount(round2(totalRepaidAmount));
+        dto.setCurrentOutstandingAmount(safeBigDecimalToDouble(borrower.getCurrentOutstandingAmount()));
+
+        return dto;
+    }
+
+    private int resolveAllowedActiveLoans(Borrower borrower) {
+        if (borrower.getOverrideMaxActiveLoans() != null && borrower.getOverrideMaxActiveLoans() > 0) {
+            return borrower.getOverrideMaxActiveLoans();
+        }
+
+        AdminAccount policyAdmin = resolvePolicyAdmin();
+
+        if (policyAdmin != null
+                && policyAdmin.getDefaultMaxActiveLoans() != null
+                && policyAdmin.getDefaultMaxActiveLoans() > 0) {
+            return policyAdmin.getDefaultMaxActiveLoans();
+        }
+
+        return DEFAULT_MAX_ACTIVE_LOANS;
+    }
+
+    private AdminAccount resolvePolicyAdmin() {
+        List<AdminAccount> admins = adminAccountRepository.findAll();
+
+        if (admins.isEmpty()) {
+            return null;
+        }
+
+        Optional<AdminAccount> activeSuperAdmin = admins.stream()
+                .filter(admin -> Boolean.TRUE.equals(admin.getActive()))
+                .filter(admin -> Boolean.TRUE.equals(admin.getSuperAdmin()))
+                .findFirst();
+
+        if (activeSuperAdmin.isPresent()) {
+            return activeSuperAdmin.get();
+        }
+
+        Optional<AdminAccount> activeAdmin = admins.stream()
+                .filter(admin -> Boolean.TRUE.equals(admin.getActive()))
+                .findFirst();
+
+        if (activeAdmin.isPresent()) {
+            return activeAdmin.get();
+        }
+
+        return admins.stream()
+                .min(Comparator.comparing(AdminAccount::getAdminId))
+                .orElse(null);
+    }
+
+    private String buildRecommendation(Borrower borrower, int allowedActiveLoanLimit, int remainingActiveLoanSlots) {
+        String eligibilityStatus = defaultString(borrower.getEligibilityStatus(), "PENDING_REVIEW");
+        String riskCategory = defaultString(borrower.getRiskCategory(), "UNKNOWN");
+        Double maxEligible = safeBigDecimalToDouble(borrower.getMaxEligibleLoanAmount());
+
+        if ("NOT_ELIGIBLE".equalsIgnoreCase(eligibilityStatus)) {
+            return "Borrower is currently not eligible for new loan applications.";
+        }
+
+        if ("ACTIVE_LOAN_LIMIT".equalsIgnoreCase(defaultString(borrower.getEligibilityTier(), ""))) {
+            return "Borrower has reached the active loan cap of " + allowedActiveLoanLimit + ".";
+        }
+
+        if ("COLLATERAL_REQUIRED".equalsIgnoreCase(eligibilityStatus)) {
+            return "Borrower can proceed only with collateral-backed applications.";
+        }
+
+        if ("PENDING_REVIEW".equalsIgnoreCase(eligibilityStatus)) {
+            return "Borrower profile needs review or completion before loan access.";
+        }
+
+        if ("LOW".equalsIgnoreCase(riskCategory)) {
+            return "Low-risk borrower. Eligible up to " + round2(maxEligible)
+                    + " with " + remainingActiveLoanSlots + " loan slot(s) remaining.";
+        }
+
+        if ("MEDIUM".equalsIgnoreCase(riskCategory)) {
+            return "Moderate-risk borrower. Eligible within the current cap, with "
+                    + remainingActiveLoanSlots + " loan slot(s) remaining.";
+        }
+
+        if ("HIGH".equalsIgnoreCase(riskCategory)) {
+            return "High-risk borrower. Only restricted or collateral-backed lending should be considered.";
+        }
+
+        return "Borrower summary refreshed successfully.";
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
+    }
+
+    private double safeDouble(Double value) {
+        return value == null ? 0.0 : value;
+    }
+
+    private double safeBigDecimalToDouble(BigDecimal value) {
+        return value == null ? 0.0 : round2(value.doubleValue());
+    }
+
+    private String defaultString(String value, String fallback) {
+        return isBlank(value) ? fallback : value;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
+    private double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 }
