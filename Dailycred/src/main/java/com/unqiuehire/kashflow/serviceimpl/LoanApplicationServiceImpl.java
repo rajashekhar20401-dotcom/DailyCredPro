@@ -2,6 +2,8 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.ApplicationStatus;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.dto.requestdto.LoanApplicationApprovalRequestDto;
 import com.unqiuehire.kashflow.dto.requestdto.LoanApplicationRequestDto;
 import com.unqiuehire.kashflow.dto.requestdto.LoanRequestDto;
@@ -17,6 +19,7 @@ import com.unqiuehire.kashflow.repository.LoanApplicationRepository;
 import com.unqiuehire.kashflow.repository.LoanPlanRepository;
 import com.unqiuehire.kashflow.service.LoanApplicationService;
 import com.unqiuehire.kashflow.service.LoanService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,7 @@ public class LoanApplicationServiceImpl implements LoanApplicationService {
     private final BorrowerRepository borrowerRepository;
     private final LenderRepository lenderRepository;
     private final LoanService loanService;
+    private final NotificationService notificationService;
 
     @Override
     public ApiResponse<LoanApplicationResponseDto> applyLoan(Long borrowerId, Long lenderId, Long planId, LoanApplicationRequestDto requestDto) {
@@ -105,7 +109,24 @@ public class LoanApplicationServiceImpl implements LoanApplicationService {
         application.setBorrower(borrower);
         application.setLender(lender);
         application.setLoanPlan(loanPlan);
-        application.setLoanAmount(requestDto.getLoanAmount());
+        Double requestedLoanAmount = requestDto.getLoanAmount();
+
+//        if (requestedLoanAmount == null) {
+//            return new ApiResponse<>(ApiStatus.FAILURE, "Loan amount is required", null);
+//        }
+//
+//        if (requestedLoanAmount <= 0) {
+//            return new ApiResponse<>(ApiStatus.FAILURE, "Loan amount must be greater than 0", null);
+//        }
+
+        Double planAmount = loanPlan.getAmount();
+
+        if (planAmount == null || planAmount <= 0) {
+            return new ApiResponse<>(ApiStatus.FAILURE, "Loan plan amount is not configured properly", null);
+        }
+
+        application.setLoanAmount(planAmount);
+
         application.setAge(requestDto.getAge());
         application.setMonthlyIncome(requestDto.getMonthlyIncome());
         application.setEmploymentType(requestDto.getEmployeeType());
@@ -120,6 +141,22 @@ public class LoanApplicationServiceImpl implements LoanApplicationService {
         application.setAppliedAt(LocalDateTime.now());
 
         LoanApplication saved = loanApplicationRepository.save(application);
+
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                borrower.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Loan Application Submitted",
+                "Your application for plan " + loanPlan.getPlanName() + " was submitted successfully."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                lender.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "New Loan Application Received",
+                "Borrower " + borrower.getBorrowerName() + " applied for plan " + loanPlan.getPlanName() + "."
+        );
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,
@@ -198,6 +235,42 @@ public class LoanApplicationServiceImpl implements LoanApplicationService {
         }
 
         LoanApplication updated = loanApplicationRepository.save(application);
+
+        if (updated.getStatus() == ApplicationStatus.APPROVED) {
+            notificationService.createNotification(
+                    NotificationTargetType.BORROWER,
+                    updated.getBorrower().getBorrowerId(),
+                    NotificationChannelType.IN_APP,
+                    "Loan Application Approved",
+                    "Your loan application was approved by the lender."
+            );
+
+            notificationService.createNotification(
+                    NotificationTargetType.LENDER,
+                    updated.getLender().getLenderId(),
+                    NotificationChannelType.IN_APP,
+                    "Loan Application Approved",
+                    "You approved a loan application for borrower " + updated.getBorrower().getBorrowerName() + "."
+            );
+        } else if (updated.getStatus() == ApplicationStatus.REJECTED) {
+            String remarks = updated.getRejectionReason() == null ? "No remarks provided" : updated.getRejectionReason();
+
+            notificationService.createNotification(
+                    NotificationTargetType.BORROWER,
+                    updated.getBorrower().getBorrowerId(),
+                    NotificationChannelType.IN_APP,
+                    "Loan Application Rejected",
+                    "Your loan application was rejected. Reason: " + remarks
+            );
+
+            notificationService.createNotification(
+                    NotificationTargetType.LENDER,
+                    updated.getLender().getLenderId(),
+                    NotificationChannelType.IN_APP,
+                    "Loan Application Rejected",
+                    "You rejected a loan application for borrower " + updated.getBorrower().getBorrowerName() + "."
+            );
+        }
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,

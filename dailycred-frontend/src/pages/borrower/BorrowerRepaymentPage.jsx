@@ -39,6 +39,16 @@ function getRepaymentTone(status) {
   return "slate";
 }
 
+function getCashCollectionTone(status) {
+  const value = String(status || "").toUpperCase();
+
+  if (value === "CONFIRMED") return "green";
+  if (value === "PENDING_BORROWER_CONFIRMATION") return "yellow";
+  if (value === "REJECTED" || value === "EXPIRED") return "red";
+
+  return "slate";
+}
+
 function formatDate(value) {
   if (!value) return "-";
   const date = new Date(value);
@@ -91,8 +101,7 @@ export default function BorrowerRepaymentPage() {
   const [notifications, setNotifications] = useState([]);
   const [loans, setLoans] = useState([]);
   const [repaymentsMap, setRepaymentsMap] = useState({});
-  const [penaltyEvents, setPenaltyEvents] = useState([]);
-  const [rewardEvents, setRewardEvents] = useState([]);
+  const [cashRequests, setCashRequests] = useState([]);
 
   const [selectedLoanId, setSelectedLoanId] = useState(null);
 
@@ -101,8 +110,11 @@ export default function BorrowerRepaymentPage() {
     paymentMode: "WALLET",
   });
 
+  const [confirmationForms, setConfirmationForms] = useState({});
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [pageError, setPageError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -114,6 +126,10 @@ export default function BorrowerRepaymentPage() {
     if (!selectedLoanId) return [];
     return repaymentsMap[selectedLoanId] || [];
   }, [repaymentsMap, selectedLoanId]);
+
+  const pendingCashConfirmations = useMemo(() => {
+    return cashRequests.filter((item) => item.status === "PENDING_BORROWER_CONFIRMATION");
+  }, [cashRequests]);
 
   const activeLoansCount = useMemo(() => {
     return loans.filter((loan) => loan.isClosed !== true).length;
@@ -135,10 +151,6 @@ export default function BorrowerRepaymentPage() {
     return loans.reduce((sum, loan) => sum + Number(loan.totalPaidAmount || 0), 0).toFixed(2);
   }, [loans]);
 
-  const totalRewards = useMemo(() => {
-    return rewardEvents.reduce((sum, event) => sum + Number(event.rewardAmount || 0), 0).toFixed(2);
-  }, [rewardEvents]);
-
   const unreadCount = useMemo(() => {
     return notifications.filter((item) => !item.readFlag).length;
   }, [notifications]);
@@ -150,28 +162,31 @@ export default function BorrowerRepaymentPage() {
     setPageError("");
 
     try {
-      const [summaryResponse, walletResponse, loansResponse, notificationsResponse] = await Promise.all([
+      const [summaryResponse, walletResponse, loansResponse, notificationsResponse, cashResponse] = await Promise.all([
         api.get(`/api/borrower-analytics/${userId}/summary`),
         api.get(`/api/wallets/BORROWER/${userId}`),
         api.get(`/api/loans/borrower/${userId}`),
         api.get(`/api/notifications/BORROWER/${userId}`),
+        api.get(`/api/cash-collections/borrower/${userId}`),
       ]);
 
       const borrowerSummary = normalizeApiData(summaryResponse) || null;
       const borrowerWallet = normalizeApiData(walletResponse) || null;
       const borrowerLoans = normalizeApiData(loansResponse) || [];
       const borrowerNotifications = normalizeApiData(notificationsResponse) || [];
+      const borrowerCashRequests = normalizeApiData(cashResponse) || [];
 
       setSummary(borrowerSummary);
       setWallet(borrowerWallet);
       setLoans(borrowerLoans);
       setNotifications(borrowerNotifications);
+      setCashRequests(borrowerCashRequests);
 
       const repaymentsEntries = await Promise.all(
         borrowerLoans.map(async (loan) => {
           try {
             const response = await api.get(`/api/repayments/loan/${loan.loanId}`);
-            return [loan.loanId, normalizeApiData(response) || response.data || []];
+            return [loan.loanId, normalizeApiData(response) || []];
           } catch {
             return [loan.loanId, []];
           }
@@ -198,27 +213,6 @@ export default function BorrowerRepaymentPage() {
       setPageError(err.response?.data?.message || err.message || "Failed to load borrower repayment data.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function loadEventLedgers(loanId) {
-    if (!loanId) {
-      setPenaltyEvents([]);
-      setRewardEvents([]);
-      return;
-    }
-
-    try {
-      const [penaltyResponse, rewardResponse] = await Promise.all([
-        api.get(`/api/penalty-events/loan/${loanId}`),
-        api.get(`/api/reward-events/loan/${loanId}`),
-      ]);
-
-      setPenaltyEvents(normalizeApiData(penaltyResponse) || penaltyResponse.data || []);
-      setRewardEvents(normalizeApiData(rewardResponse) || rewardResponse.data || []);
-    } catch {
-      setPenaltyEvents([]);
-      setRewardEvents([]);
     }
   }
 
@@ -277,11 +271,70 @@ export default function BorrowerRepaymentPage() {
       });
 
       await loadPage(false);
-      await loadEventLedgers(selectedLoan.loanId);
     } catch (err) {
       setPageError(err.response?.data?.message || err.message || "Failed to record repayment.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function updateConfirmationForm(confirmationId, field, value) {
+    setConfirmationForms((prev) => ({
+      ...prev,
+      [confirmationId]: {
+        ...(prev[confirmationId] || { confirmationToken: "", borrowerNote: "" }),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function confirmCashCollection(confirmationId) {
+    const form = confirmationForms[confirmationId] || { confirmationToken: "", borrowerNote: "" };
+
+    if (!form.confirmationToken || form.confirmationToken.trim().length < 3) {
+      setPageError("Please enter the repayment proof token before confirming.");
+      return;
+    }
+
+    setActionLoadingId(confirmationId);
+    setPageError("");
+    setMessage("");
+
+    try {
+      const payload = {
+        confirmationToken: form.confirmationToken.trim(),
+        borrowerNote: form.borrowerNote?.trim() || null,
+      };
+
+      const response = await api.post(`/api/cash-collections/borrower/${userId}/${confirmationId}/confirm`, payload);
+      setMessage(response.data?.message || "Cash repayment confirmed successfully.");
+      await loadPage(false);
+    } catch (err) {
+      setPageError(err.response?.data?.message || err.message || "Failed to confirm cash repayment.");
+    } finally {
+      setActionLoadingId(null);
+    }
+  }
+
+  async function rejectCashCollection(confirmationId) {
+    const form = confirmationForms[confirmationId] || { borrowerNote: "" };
+
+    setActionLoadingId(confirmationId);
+    setPageError("");
+    setMessage("");
+
+    try {
+      const payload = {
+        borrowerNote: form.borrowerNote?.trim() || null,
+      };
+
+      const response = await api.post(`/api/cash-collections/borrower/${userId}/${confirmationId}/reject`, payload);
+      setMessage(response.data?.message || "Cash repayment rejected successfully.");
+      await loadPage(false);
+    } catch (err) {
+      setPageError(err.response?.data?.message || err.message || "Failed to reject cash repayment.");
+    } finally {
+      setActionLoadingId(null);
     }
   }
 
@@ -295,10 +348,6 @@ export default function BorrowerRepaymentPage() {
         amountPaid: selectedLoan.dailyEmi ? String(selectedLoan.dailyEmi) : "",
         paymentMode: "WALLET",
       });
-      loadEventLedgers(selectedLoan.loanId);
-    } else {
-      setPenaltyEvents([]);
-      setRewardEvents([]);
     }
   }, [selectedLoanId, selectedLoan]);
 
@@ -315,7 +364,7 @@ export default function BorrowerRepaymentPage() {
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Borrower Repayment Center</h2>
         <p className="mt-2 text-sm text-slate-500">
-          Review your active loans, see effective repayable balance after any interest rebate, penalty reasons, and early-payment rewards.
+          Review your active loans, confirm cash repayment proof requests, see effective repayable balance, and make repayments.
         </p>
       </div>
 
@@ -326,7 +375,7 @@ export default function BorrowerRepaymentPage() {
         <SummaryCard title="Total Repaid" value={totalRepaid} subtitle="Across all loans" />
         <SummaryCard title="Outstanding" value={totalOutstanding} subtitle="Remaining repayable balance" />
         <SummaryCard title="Interest Rebate" value={totalInterestRebate} subtitle="Saved by advance / early repayment" />
-        <SummaryCard title="Rewards Earned" value={totalRewards} subtitle="Tracked early-repayment reward" />
+        <SummaryCard title="Pending Proof Requests" value={pendingCashConfirmations.length} subtitle="Cash confirmations awaiting you" />
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -345,6 +394,97 @@ export default function BorrowerRepaymentPage() {
           ) : null}
         </div>
       )}
+
+      <div className="rounded-2xl bg-white p-6 shadow-sm">
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">Cash Repayment Proof Requests</h3>
+          <button
+            type="button"
+            onClick={() => loadPage(true)}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700"
+          >
+            Refresh
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {cashRequests.length === 0 ? (
+            <p className="text-sm text-slate-500">No cash repayment proof requests found.</p>
+          ) : (
+            cashRequests.map((item) => {
+              const form = confirmationForms[item.confirmationId] || { confirmationToken: "", borrowerNote: "" };
+              const isPending = item.status === "PENDING_BORROWER_CONFIRMATION";
+
+              return (
+                <div key={item.confirmationId} className="rounded-2xl border border-slate-200 p-5">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-base font-semibold text-slate-900">Loan {item.loanId} Cash Proof Request</h4>
+                      <p className="mt-1 text-sm text-slate-500">Proof token: <span className="font-semibold text-slate-700">{item.generatedToken || "-"}</span></p>
+                    </div>
+                    <StatusPill text={item.status} tone={getCashCollectionTone(item.status)} />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 text-sm text-slate-700 md:grid-cols-3">
+                    <p><span className="font-medium">Amount:</span> {item.amount}</p>
+                    <p><span className="font-medium">Payment Date:</span> {formatDate(item.paymentDate)}</p>
+                    <p><span className="font-medium">Repayment ID:</span> {item.repaymentId || "-"}</p>
+                    <p><span className="font-medium">Lender Note:</span> {item.lenderNote || "-"}</p>
+                    <p><span className="font-medium">Borrower Note:</span> {item.borrowerNote || "-"}</p>
+                    <p><span className="font-medium">Expires At:</span> {formatDateTime(item.expiresAt)}</p>
+                  </div>
+
+                  {isPending ? (
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">Enter Proof Token</label>
+                        <input
+                          type="text"
+                          value={form.confirmationToken}
+                          onChange={(e) => updateConfirmationForm(item.confirmationId, "confirmationToken", e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                          placeholder="Enter lender-shared proof token"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-slate-700">Borrower Note</label>
+                        <input
+                          type="text"
+                          value={form.borrowerNote}
+                          onChange={(e) => updateConfirmationForm(item.confirmationId, "borrowerNote", e.target.value)}
+                          className="w-full rounded-xl border border-slate-300 px-3 py-2"
+                          placeholder="Optional note"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === item.confirmationId}
+                          onClick={() => confirmCashCollection(item.confirmationId)}
+                          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                        >
+                          {actionLoadingId === item.confirmationId ? "Processing..." : "Confirm Cash Repayment"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={actionLoadingId === item.confirmationId}
+                          onClick={() => rejectCashCollection(item.confirmationId)}
+                          className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
+                        >
+                          {actionLoadingId === item.confirmationId ? "Processing..." : "Reject Request"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
 
       <div className="rounded-2xl bg-white p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
@@ -487,7 +627,7 @@ export default function BorrowerRepaymentPage() {
                     placeholder="Enter repayment amount"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Use a higher amount for advance payment or pre-closure. Interest rebate and rewards will be tracked automatically when eligible.
+                    Use a higher amount for advance payment or pre-closure. Interest rebate will be applied automatically when eligible.
                   </p>
                 </div>
 
@@ -517,7 +657,7 @@ export default function BorrowerRepaymentPage() {
                     className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-slate-600"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Repayments from this page are always recorded for today to avoid future-date penalty confusion.
+                    Repayments from this page are always recorded for today.
                   </p>
                 </div>
 
@@ -573,98 +713,6 @@ export default function BorrowerRepaymentPage() {
                         <td className="px-3 py-3 text-slate-700">{item.missedDays ?? 0}</td>
                         <td className="px-3 py-3 text-slate-700">{item.balanceAmount ?? "-"}</td>
                         <td className="px-3 py-3 text-slate-700">{item.transactionReference || "-"}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">Penalty Explanation Ledger</h3>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
-                    <th className="px-3 py-3">Date</th>
-                    <th className="px-3 py-3">Reason</th>
-                    <th className="px-3 py-3">Amount</th>
-                    <th className="px-3 py-3">Trigger Count</th>
-                    <th className="px-3 py-3">Threshold</th>
-                    <th className="px-3 py-3">Daily Interest</th>
-                    <th className="px-3 py-3">Penalty %</th>
-                    <th className="px-3 py-3">Explanation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {penaltyEvents.length === 0 ? (
-                    <tr>
-                      <td colSpan="8" className="px-3 py-6 text-center text-slate-500">
-                        No penalty explanation records found for this loan.
-                      </td>
-                    </tr>
-                  ) : (
-                    penaltyEvents.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-100">
-                        <td className="px-3 py-3 text-slate-700">{formatDate(item.eventDate)}</td>
-                        <td className="px-3 py-3 text-slate-700">
-                          <StatusPill
-                            text={item.reasonType || "UNKNOWN"}
-                            tone={item.reasonType === "MISSED_STREAK_PENALTY" ? "red" : "yellow"}
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-slate-700">{item.amount ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.triggerCount ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.thresholdValue ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.dailyInterestAmount ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.penaltyPercent ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.note || "-"}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-slate-900">Reward Ledger</h3>
-
-            <div className="overflow-x-auto">
-              <table className="min-w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500">
-                    <th className="px-3 py-3">Date</th>
-                    <th className="px-3 py-3">Reward Type</th>
-                    <th className="px-3 py-3">Reward %</th>
-                    <th className="px-3 py-3">Base Amount</th>
-                    <th className="px-3 py-3">Reward Amount</th>
-                    <th className="px-3 py-3">Explanation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rewardEvents.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="px-3 py-6 text-center text-slate-500">
-                        No reward records found for this loan yet.
-                      </td>
-                    </tr>
-                  ) : (
-                    rewardEvents.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-100">
-                        <td className="px-3 py-3 text-slate-700">{formatDate(item.eventDate)}</td>
-                        <td className="px-3 py-3 text-slate-700">
-                          <StatusPill
-                            text={item.reasonType || "UNKNOWN"}
-                            tone="blue"
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-slate-700">{item.rewardPercent ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.baseAmount ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.rewardAmount ?? 0}</td>
-                        <td className="px-3 py-3 text-slate-700">{item.note || "-"}</td>
                       </tr>
                     ))
                   )}

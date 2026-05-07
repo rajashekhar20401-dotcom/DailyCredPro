@@ -2,6 +2,8 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.LoanPlanStatus;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.dto.requestdto.LoanPlanRequest;
 import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
 import com.unqiuehire.kashflow.dto.responsedto.LoanPlanResponseDto;
@@ -10,6 +12,7 @@ import com.unqiuehire.kashflow.entity.LoanPlan;
 import com.unqiuehire.kashflow.repository.LenderRepository;
 import com.unqiuehire.kashflow.repository.LoanPlanRepository;
 import com.unqiuehire.kashflow.service.LoanPlanService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +27,9 @@ public class LoanPlanServiceImpl implements LoanPlanService {
 
     @Autowired
     private LenderRepository lenderRepository;
+
+    @Autowired
+    private NotificationService notificationService;
 
     @Override
     public ApiResponse<LoanPlanResponseDto> createLoanPlan(Long lenderId, LoanPlanRequest request) {
@@ -56,6 +62,14 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         loanPlan.setLender(lender);
 
         LoanPlan saved = loanPlanRepository.save(loanPlan);
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                lenderId,
+                NotificationChannelType.IN_APP,
+                "Loan Plan Created",
+                "Loan plan " + saved.getPlanName() + " has been created successfully."
+        );
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan Plan Created", mapToResponse(saved));
     }
@@ -120,6 +134,14 @@ public class LoanPlanServiceImpl implements LoanPlanService {
         loanPlan.setStatus(LoanPlanStatus.ACTIVE);
 
         LoanPlan updated = loanPlanRepository.save(loanPlan);
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                lenderId,
+                NotificationChannelType.IN_APP,
+                "Loan Plan Updated",
+                "Loan plan " + updated.getPlanName() + " has been updated successfully."
+        );
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan Plan Updated", mapToResponse(updated));
     }

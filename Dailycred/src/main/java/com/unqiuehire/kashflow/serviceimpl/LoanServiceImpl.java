@@ -2,6 +2,8 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.ApplicationStatus;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.constant.WalletOwnerType;
 import com.unqiuehire.kashflow.constant.WalletTransactionType;
 import com.unqiuehire.kashflow.dto.requestdto.LoanRequestDto;
@@ -17,6 +19,7 @@ import com.unqiuehire.kashflow.repository.LoanPlanRepository;
 import com.unqiuehire.kashflow.repository.LoanRepository;
 import com.unqiuehire.kashflow.service.LoanCalculationService;
 import com.unqiuehire.kashflow.service.LoanService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import com.unqiuehire.kashflow.service.WalletService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -38,6 +41,7 @@ public class LoanServiceImpl implements LoanService {
     private final LoanCalculationService loanCalculationService;
     private final WalletService walletService;
     private final LoanPlanRepository loanPlanRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -174,6 +178,22 @@ public class LoanServiceImpl implements LoanService {
             borrowerRepository.save(borrower);
         }
 
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                savedLoan.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Loan Disbursed",
+                "Loan amount of " + disbursedAmount + " was disbursed to your borrower wallet for loan " + savedLoan.getLoanId() + "."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                savedLoan.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Loan Created & Disbursed",
+                "Loan " + savedLoan.getLoanId() + " was created and disbursed successfully."
+        );
+
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan created successfully", mapToResponseDto(savedLoan));
     }
 
@@ -232,6 +252,22 @@ public class LoanServiceImpl implements LoanService {
         loan.setEndDate(LocalDate.now());
 
         loanRepository.save(loan);
+
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                loan.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Loan Closed",
+                "Loan " + loan.getLoanId() + " has been closed successfully."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                loan.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Loan Closed",
+                "Loan " + loan.getLoanId() + " has been closed successfully."
+        );
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Loan closed successfully", "Loan closed successfully");
     }

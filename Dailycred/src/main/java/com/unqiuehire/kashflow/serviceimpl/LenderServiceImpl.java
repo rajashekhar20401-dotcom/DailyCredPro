@@ -2,12 +2,15 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.LenderConstants;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.dto.requestdto.LenderRequestDto;
 import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
 import com.unqiuehire.kashflow.dto.responsedto.LenderResponseDto;
 import com.unqiuehire.kashflow.entity.Lender;
 import com.unqiuehire.kashflow.repository.LenderRepository;
 import com.unqiuehire.kashflow.service.LenderService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import java.time.LocalDateTime;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,6 +28,7 @@ public class LenderServiceImpl implements LenderService {
     private final LenderRepository lenderRepository;
 
     private final PasswordEncoder passwordEncoder;
+    private final NotificationService notificationService;
 
 //    //public LenderServiceImpl(PasswordEncoder passwordEncoder) {
 //        this.passwordEncoder = passwordEncoder;
@@ -121,6 +125,15 @@ public class LenderServiceImpl implements LenderService {
         }
 
         Lender savedLender = lenderRepository.save(lender);
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                savedLender.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Lender Account Created",
+                "Your lender account has been created successfully."
+        );
+
         LenderResponseDto responseDto = mapToResponseDto(savedLender);
 
         return new ApiResponse<>(
@@ -281,6 +294,15 @@ public class LenderServiceImpl implements LenderService {
         }
 
         Lender updatedLender = lenderRepository.save(lender);
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                updatedLender.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Lender Profile Updated",
+                "Your lender profile was updated successfully."
+        );
+
         LenderResponseDto responseDto = mapToResponseDto(updatedLender);
 
         return new ApiResponse<>(

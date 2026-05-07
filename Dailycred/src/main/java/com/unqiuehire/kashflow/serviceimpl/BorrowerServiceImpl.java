@@ -2,6 +2,8 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.BorrowerConstants;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.dto.requestdto.BorrowerRequestDto;
 import com.unqiuehire.kashflow.dto.responsedto.ApiResponse;
 import com.unqiuehire.kashflow.dto.responsedto.BorrowerResponseDto;
@@ -9,6 +11,7 @@ import com.unqiuehire.kashflow.entity.Borrower;
 import com.unqiuehire.kashflow.repository.BorrowerRepository;
 import com.unqiuehire.kashflow.service.BorrowerAnalyticsService;
 import com.unqiuehire.kashflow.service.BorrowerService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -27,7 +30,7 @@ public class BorrowerServiceImpl implements BorrowerService {
     private final BorrowerRepository repo;
     private final BorrowerAnalyticsService borrowerAnalyticsService;
     private final PasswordEncoder passwordEncoder;
-    // private final NotificationService notificationService;
+    private final NotificationService notificationService;
 
     @Override
     public ApiResponse<BorrowerResponseDto> createBorrower(BorrowerRequestDto borrowerRequestDto) {
@@ -72,13 +75,13 @@ public class BorrowerServiceImpl implements BorrowerService {
         Borrower updatedBorrower = repo.findById(savedBorrower.getBorrowerId())
                 .orElseThrow(() -> new RuntimeException("Borrower not found after creation"));
 
-//        notificationService.createNotification(
-//                NotificationTargetType.BORROWER,
-//                updatedBorrower.getBorrowerId(),
-//                NotificationChannelType.IN_APP,
-//                "Borrower Account Created",
-//                "Your borrower account has been created successfully."
-//        );
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                updatedBorrower.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Borrower Account Created",
+                "Your borrower account has been created successfully."
+        );
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,
@@ -215,6 +218,14 @@ public class BorrowerServiceImpl implements BorrowerService {
 
         Borrower updatedBorrower = repo.findById(savedBorrower.getBorrowerId())
                 .orElseThrow(() -> new RuntimeException("Borrower not found after update"));
+
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                updatedBorrower.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Borrower Profile Updated",
+                "Your borrower profile was updated successfully."
+        );
 
         return new ApiResponse<>(
                 ApiStatus.SUCCESS,

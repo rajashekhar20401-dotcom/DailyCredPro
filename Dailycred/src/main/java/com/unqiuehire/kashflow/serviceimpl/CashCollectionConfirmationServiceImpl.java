@@ -2,6 +2,8 @@ package com.unqiuehire.kashflow.serviceimpl;
 
 import com.unqiuehire.kashflow.constant.ApiStatus;
 import com.unqiuehire.kashflow.constant.CashCollectionStatus;
+import com.unqiuehire.kashflow.constant.NotificationChannelType;
+import com.unqiuehire.kashflow.constant.NotificationTargetType;
 import com.unqiuehire.kashflow.constant.PaymentMode;
 import com.unqiuehire.kashflow.dto.requestdto.CashCollectionConfirmRequestDto;
 import com.unqiuehire.kashflow.dto.requestdto.CashCollectionInitiateRequestDto;
@@ -16,6 +18,7 @@ import com.unqiuehire.kashflow.repository.CashCollectionConfirmationRepository;
 import com.unqiuehire.kashflow.repository.LoanRepository;
 import com.unqiuehire.kashflow.service.CashCollectionConfirmationService;
 import com.unqiuehire.kashflow.service.RepaymentService;
+import com.unqiuehire.kashflow.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +37,7 @@ public class CashCollectionConfirmationServiceImpl implements CashCollectionConf
     private final CashCollectionConfirmationRepository repository;
     private final LoanRepository loanRepository;
     private final RepaymentService repaymentService;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional
@@ -72,6 +76,22 @@ public class CashCollectionConfirmationServiceImpl implements CashCollectionConf
         confirmation.setExpiresAt(LocalDateTime.now().plusMinutes(15));
 
         CashCollectionConfirmation saved = repository.save(confirmation);
+
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                saved.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Cash Repayment Confirmation Required",
+                "Lender initiated a cash repayment request for loan " + saved.getLoanId() + ". Confirm using proof token " + saved.getGeneratedToken() + " before it expires."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                saved.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Cash Repayment Request Initiated",
+                "Cash repayment request created for loan " + saved.getLoanId() + " with proof token " + saved.getGeneratedToken() + "."
+        );
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Cash collection initiated successfully", mapToResponse(saved));
     }
@@ -118,6 +138,22 @@ public class CashCollectionConfirmationServiceImpl implements CashCollectionConf
 
         CashCollectionConfirmation updated = repository.save(confirmation);
 
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                updated.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Cash Repayment Confirmed",
+                "Your cash repayment for loan " + updated.getLoanId() + " has been confirmed. Proof token: " + updated.getGeneratedToken() + "."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                updated.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Borrower Confirmed Cash Repayment",
+                "Borrower confirmed cash repayment for loan " + updated.getLoanId() + ". Proof token: " + updated.getGeneratedToken() + "."
+        );
+
         return new ApiResponse<>(ApiStatus.SUCCESS, "Cash collection confirmed successfully", mapToResponse(updated));
     }
 
@@ -147,6 +183,22 @@ public class CashCollectionConfirmationServiceImpl implements CashCollectionConf
         confirmation.setRejectedAt(LocalDateTime.now());
 
         CashCollectionConfirmation updated = repository.save(confirmation);
+
+        notificationService.createNotification(
+                NotificationTargetType.BORROWER,
+                updated.getBorrowerId(),
+                NotificationChannelType.IN_APP,
+                "Cash Repayment Rejected",
+                "You rejected a cash repayment request for loan " + updated.getLoanId() + "."
+        );
+
+        notificationService.createNotification(
+                NotificationTargetType.LENDER,
+                updated.getLenderId(),
+                NotificationChannelType.IN_APP,
+                "Cash Repayment Rejected By Borrower",
+                "Borrower rejected a cash repayment request for loan " + updated.getLoanId() + "."
+        );
 
         return new ApiResponse<>(ApiStatus.SUCCESS, "Cash collection rejected successfully", mapToResponse(updated));
     }
@@ -194,7 +246,7 @@ public class CashCollectionConfirmationServiceImpl implements CashCollectionConf
 
     private String generateSixDigitToken() {
         int token = ThreadLocalRandom.current().nextInt(100000, 1000000);
-        return String.valueOf(token);
+        return "DCP" + token;
     }
 
     private String safeText(String value) {

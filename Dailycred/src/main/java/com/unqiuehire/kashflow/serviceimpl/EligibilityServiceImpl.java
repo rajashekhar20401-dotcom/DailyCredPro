@@ -34,6 +34,7 @@ public class EligibilityServiceImpl implements EligibilityService {
     private static final double DEFAULT_LOW_LIMIT = 50000.0;
 
     private static final int DEFAULT_MANUAL_REVIEW_RISK_THRESHOLD = 60;
+    private static final int MIN_BASIC_KYC_PERCENT = 30;
 
     private final AdminAccountRepository adminAccountRepository;
 
@@ -71,6 +72,7 @@ public class EligibilityServiceImpl implements EligibilityService {
         int totalMissedDays = borrower.getTotalMissedDays() == null ? 0 : borrower.getTotalMissedDays();
         int maxConsecutiveMissedDays = borrower.getMaxConsecutiveMissedDays() == null ? 0 : borrower.getMaxConsecutiveMissedDays();
         int defaultedLoanCount = borrower.getDefaultedLoanCount() == null ? 0 : borrower.getDefaultedLoanCount();
+        int kycCompletionPercent = borrower.getKycCompletionPercent() == null ? 0 : borrower.getKycCompletionPercent();
 
         BigDecimal monthlyIncome = borrower.getMonthlyIncome() == null ? BigDecimal.ZERO : borrower.getMonthlyIncome();
 
@@ -79,6 +81,9 @@ public class EligibilityServiceImpl implements EligibilityService {
         boolean kycVerified = Boolean.TRUE.equals(borrower.getKycVerified());
         boolean incomeProofUploaded = Boolean.TRUE.equals(borrower.getIncomeProofUploaded());
         boolean collateralProvided = Boolean.TRUE.equals(borrower.getCollateralProvided());
+
+        boolean hasIdentityDocument =
+                !isBlank(borrower.getAadharCardNumber()) || !isBlank(borrower.getPanCardNumber());
 
         // 1) Hard stop rules
         if (blacklisted) {
@@ -99,12 +104,23 @@ public class EligibilityServiceImpl implements EligibilityService {
             return dto;
         }
 
-        if (!kycVerified) {
-            dto.setEligibilityTier("KYC_PENDING");
+        if (!hasIdentityDocument) {
+            dto.setEligibilityTier("KYC_MISSING");
             dto.setEligibilityStatus("PENDING_REVIEW");
             dto.setMaxEligibleLoanAmount(0.0);
             dto.setCollateralRequired(false);
-            dto.setReason("Complete KYC verification to unlock loan eligibility.");
+            dto.setReason("Add at least Aadhaar or PAN to unlock basic loan eligibility.");
+            applyBorrowerOverrideFields(dto, borrower);
+            return dto;
+        }
+
+        if (kycCompletionPercent < MIN_BASIC_KYC_PERCENT) {
+            dto.setEligibilityTier("KYC_INCOMPLETE");
+            dto.setEligibilityStatus("PENDING_REVIEW");
+            dto.setMaxEligibleLoanAmount(0.0);
+            dto.setCollateralRequired(false);
+            dto.setReason("Complete at least 30% KYC to unlock basic loan eligibility.");
+            applyBorrowerOverrideFields(dto, borrower);
             return dto;
         }
 
@@ -133,7 +149,23 @@ public class EligibilityServiceImpl implements EligibilityService {
                         || poorEarlyHistory
                         || riskScore >= manualReviewRiskThreshold;
 
-        // 3) Base eligibility tiering
+        // 3) Partial KYC rule:
+        // Aadhaar/PAN exists + at least 30% KYC = allow only limited/basic access
+        if (!kycVerified) {
+            dto.setEligibilityTier("BASIC_KYC");
+            dto.setEligibilityStatus(collateralRequired ? "COLLATERAL_REQUIRED" : "ELIGIBLE_WITH_CAUTION");
+            dto.setMaxEligibleLoanAmount(collateralRequired ? lowLimit : basicLimit);
+            dto.setCollateralRequired(collateralRequired);
+            dto.setReason(
+                    collateralRequired
+                            ? "Basic eligibility unlocked, but collateral is required until KYC verification is completed."
+                            : "Basic eligibility unlocked. Complete KYC verification to access higher loan limits."
+            );
+            applyBorrowerOverrideFields(dto, borrower);
+            return dto;
+        }
+
+        // 4) Fully verified borrower tiering
         if (score >= 80
                 && riskScore <= 24
                 && monthlyIncome.compareTo(BigDecimal.valueOf(50000)) >= 0
@@ -174,7 +206,7 @@ public class EligibilityServiceImpl implements EligibilityService {
             return dto;
         }
 
-        if (score >= 35 && !blacklisted && !fraudFlag) {
+        if (score >= 35) {
             dto.setEligibilityTier("LOW_LIMIT");
             dto.setEligibilityStatus(collateralRequired ? "COLLATERAL_REQUIRED" : "ELIGIBLE_WITH_CAUTION");
             dto.setMaxEligibleLoanAmount(lowLimit);
@@ -188,7 +220,7 @@ public class EligibilityServiceImpl implements EligibilityService {
             return dto;
         }
 
-        // 4) Final fallback
+        // 5) Final fallback
         dto.setEligibilityTier("HIGH_RISK");
         dto.setEligibilityStatus(collateralProvided ? "PENDING_MANUAL_REVIEW" : "NOT_ELIGIBLE");
         dto.setMaxEligibleLoanAmount(0.0);

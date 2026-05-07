@@ -121,7 +121,6 @@ function getEligibility(plan, borrowerProfile, borrowerAnalytics) {
     reasons.push("Borrower age is above the allowed maximum.");
   }
 
-  // Keep this only as an extra caution rule.
   if (riskCategory === "HIGH" && Number(plan.amount) > maxEligibleLoanAmount && maxEligibleLoanAmount > 0) {
     reasons.push("High-risk profile cannot access plans above the current cap.");
   }
@@ -149,7 +148,6 @@ export default function BorrowerLoanApplicationPage() {
   const [applications, setApplications] = useState([]);
 
   const [form, setForm] = useState({
-    loanAmount: "",
     age: "",
     monthlyIncome: "",
     employeeType: "SELF_EMPLOYED",
@@ -199,7 +197,6 @@ export default function BorrowerLoanApplicationPage() {
 
       setForm((prev) => ({
         ...prev,
-        loanAmount: "",
         age: calculateAge(borrower?.dateOfBirth),
         monthlyIncome: borrower?.monthlyIncome ? Number(borrower.monthlyIncome) : "",
         employeeType: borrower?.employmentType || "SELF_EMPLOYED",
@@ -364,7 +361,7 @@ export default function BorrowerLoanApplicationPage() {
 
     try {
       const payload = {
-        loanAmount: form.loanAmount === "" ? null : Number(form.loanAmount),
+        loanAmount: selectedPlan.amount,
         age: form.age === "" ? null : Number(form.age),
         monthlyIncome: form.monthlyIncome === "" ? null : Number(form.monthlyIncome),
         employeeType: form.employeeType,
@@ -656,13 +653,14 @@ export default function BorrowerLoanApplicationPage() {
               <div>
                 <label className="mb-1 block text-sm font-medium text-slate-700">Loan Amount</label>
                 <input
-                  type="number"
-                  name="loanAmount"
-                  value={form.loanAmount}
-                  onChange={handleChange}
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2"
-                  placeholder="50000"
+                  type="text"
+                  value={selectedPlan?.amount ?? ""}
+                  readOnly
+                  className="w-full rounded-xl border border-slate-300 bg-slate-100 px-3 py-2 text-slate-600"
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  This amount is fixed by the selected loan plan.
+                </p>
               </div>
 
               <div>
